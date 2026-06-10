@@ -52,6 +52,14 @@ Watch-режим для разработки:
 npm run test:watch
 ```
 
+Integration-тесты с реальным MOEX ISS API запускаются отдельно:
+
+```bash
+npm run test:integration
+```
+
+Они требуют доступа к сети и могут падать при недоступности или изменениях MOEX API. Обычный `npm run test` сеть не использует.
+
 ## Production build
 
 ```bash
