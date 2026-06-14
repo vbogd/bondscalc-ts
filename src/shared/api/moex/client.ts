@@ -8,7 +8,7 @@ import {
 import type { BasicBondInfo, BondDetails, BondSearchRef } from "./types";
 
 const MOEX_ISS_BASE_URL = "https://iss.moex.com/iss";
-const DEFAULT_SEARCH_LIMIT = 20;
+const DEFAULT_SEARCH_LIMIT = 100;
 const PRIMARY_BOND_SNAPSHOT_TTL_MS = 60_000;
 const PRIMARY_BOND_SECURITY_COLUMNS = [
   "SECID",
@@ -70,17 +70,7 @@ export async function searchBonds(
     return [];
   }
 
-  const [searchRefs, primaryBondSnapshot] = await Promise.all([
-    searchBondRefs(normalizedQuery, limit),
-    getPrimaryBondSnapshot(),
-  ]);
-  const snapshotBySecid = new Map(
-    primaryBondSnapshot.map((bond) => [bond.secid, bond]),
-  );
-
-  return searchRefs
-    .map((searchRef) => snapshotBySecid.get(searchRef.secid) ?? null)
-    .filter((bond) => bond !== null);
+  return searchPrimaryBondSnapshot(await getPrimaryBondSnapshot(), normalizedQuery, limit);
 }
 
 export async function getBasicBondInfo({
@@ -192,4 +182,36 @@ async function moexFetchJson(
   }
 
   return response.json();
+}
+
+function searchPrimaryBondSnapshot(
+  bonds: BasicBondInfo[],
+  query: string,
+  limit: number,
+): BasicBondInfo[] {
+  const normalizedQuery = normalizeSearchValue(query);
+
+  return bonds
+    .filter((bond) => matchesPrimaryBondSearch(bond, normalizedQuery))
+    .sort((left, right) => left.shortname.localeCompare(right.shortname, "ru"))
+    .slice(0, limit);
+}
+
+function matchesPrimaryBondSearch(
+  bond: BasicBondInfo,
+  normalizedQuery: string,
+): boolean {
+  const secid = normalizeSearchValue(bond.secid);
+  const isin = normalizeSearchValue(bond.isin);
+  const shortname = normalizeSearchValue(bond.shortname);
+
+  return (
+    secid.includes(normalizedQuery) ||
+    isin.includes(normalizedQuery) ||
+    shortname.includes(normalizedQuery)
+  );
+}
+
+function normalizeSearchValue(value: string): string {
+  return value.trim().toLocaleUpperCase("ru-RU");
 }
