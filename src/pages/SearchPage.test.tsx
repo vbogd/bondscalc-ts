@@ -51,7 +51,10 @@ describe("SearchPage", () => {
 
     await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "rzd");
 
+    expect(searchBasicBondInfoMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Ищем облигации")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "РЖД 001P-25R" })).toBeInTheDocument();
+    expect(searchBasicBondInfoMock).toHaveBeenCalledWith("rzd");
     expect(screen.getByRole("link", { name: /РЖД 001P-25R/i })).toHaveAttribute(
       "href",
       "/bond/RU000A106A86",
@@ -89,7 +92,8 @@ describe("SearchPage", () => {
 
     await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "262");
 
-    const headings = await screen.findAllByRole("heading", { level: 2 });
+    await screen.findByRole("heading", { name: "ОФЗ 26233" });
+    const headings = screen.getAllByRole("heading", { level: 2 });
 
     expect(headings.map((heading) => heading.textContent)).toEqual([
       "ОФЗ 26233",

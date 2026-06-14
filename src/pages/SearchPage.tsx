@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, Loader2, Search } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   MIN_BOND_SEARCH_QUERY_LENGTH,
@@ -9,19 +9,27 @@ import {
 } from "../shared/api/moex";
 import type { BasicBondInfo, LocalDate } from "../shared/api/moex";
 
+const BOND_SEARCH_DEBOUNCE_MS = 200;
+
 export function SearchPage() {
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim();
+  const debouncedQuery = useDebouncedValue(
+    normalizedQuery,
+    BOND_SEARCH_DEBOUNCE_MS,
+  );
   const canSearch = normalizedQuery.length >= MIN_BOND_SEARCH_QUERY_LENGTH;
+  const canRunSearch = canSearch && debouncedQuery.length >= MIN_BOND_SEARCH_QUERY_LENGTH;
+  const isDebouncing = canSearch && normalizedQuery !== debouncedQuery;
   const {
     data: bonds = [],
     error,
     isError,
     isFetching,
   } = useQuery({
-    queryKey: ["bond-search", normalizedQuery],
-    queryFn: () => searchBasicBondInfo(normalizedQuery),
-    enabled: canSearch,
+    queryKey: ["bond-search", debouncedQuery],
+    queryFn: () => searchBasicBondInfo(debouncedQuery),
+    enabled: canRunSearch,
   });
   const sortedBonds = [...bonds].sort((left, right) =>
     left.shortname.localeCompare(right.shortname, "ru"),
@@ -53,7 +61,7 @@ export function SearchPage() {
           title="Введите минимум 3 символа"
           text="Можно искать по SECID, ISIN или части названия облигации."
         />
-      ) : isFetching ? (
+      ) : isDebouncing || isFetching ? (
         <SearchState
           icon={<Loader2 className="size-5 animate-spin" aria-hidden="true" />}
           title="Ищем облигации"
@@ -80,6 +88,20 @@ export function SearchPage() {
       )}
     </section>
   );
+}
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedValue(value);
+    }, delayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [delayMs, value]);
+
+  return debouncedValue;
 }
 
 function BondSearchResult({ bond }: { bond: BasicBondInfo }) {
