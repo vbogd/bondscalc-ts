@@ -86,4 +86,26 @@ describe("MOEX ISS client integration", () => {
     });
     expect(Array.isArray(details.offerSchedule)).toBe(true);
   });
+
+  it("loads the live calculator payload for a selected bond", async () => {
+    const [bond, details] = await Promise.all([
+      getBasicBondInfo({ secid: "SU26233RMFS5" }),
+      getBondDetails("SU26233RMFS5"),
+    ]);
+
+    expect(bond).toMatchObject({
+      secid: "SU26233RMFS5",
+      isin: "RU000A101F94",
+      face_value: 1000,
+      mat_date: "2035-07-18",
+    });
+    expect(details).toMatchObject({
+      secid: "SU26233RMFS5",
+      isin: "RU000A101F94",
+      boardId: "TQOB",
+      maturityDate: "2035-07-18",
+    });
+    expect(bond.nkd).toEqual(expect.any(Number));
+    expect(bond.coupon_percent).toEqual(expect.any(Number));
+  });
 });
