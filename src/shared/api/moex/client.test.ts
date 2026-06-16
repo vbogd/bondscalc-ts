@@ -14,9 +14,9 @@ describe("MOEX ISS client", () => {
 
   it("searches bonds through the primary-board snapshot", async () => {
     const fetchMock = mockSnapshotFetch();
-    const { searchBonds } = await import("./client");
+    const { searchBasicBondInfo } = await import("./client");
 
-    const results = await searchBonds("262", 2);
+    const results = await searchBasicBondInfo("262", 2);
 
     expect(results.map((bond) => bond.secid)).toEqual([
       "SU26233RMFS5",
@@ -30,28 +30,28 @@ describe("MOEX ISS client", () => {
 
   it("searches by SECID prefix", async () => {
     mockSnapshotFetch();
-    const { searchBonds } = await import("./client");
+    const { searchBasicBondInfo } = await import("./client");
 
-    const results = await searchBonds("SU26240");
+    const results = await searchBasicBondInfo("SU26240");
 
     expect(results.map((bond) => bond.secid)).toEqual(["SU26240RMFS0"]);
   });
 
   it("searches by ISIN but not registration number", async () => {
     mockSnapshotFetch();
-    const { searchBonds } = await import("./client");
+    const { searchBasicBondInfo } = await import("./client");
 
-    await expect(searchBonds("RU000A106A86")).resolves.toEqual([
+    await expect(searchBasicBondInfo("RU000A106A86")).resolves.toEqual([
       expect.objectContaining({ secid: "RU000A106A86" }),
     ]);
-    await expect(searchBonds("4B02")).resolves.toEqual([]);
+    await expect(searchBasicBondInfo("4B02")).resolves.toEqual([]);
   });
 
   it("does not load the snapshot until the query has at least 3 symbols", async () => {
     const fetchMock = mockSnapshotFetch();
-    const { searchBonds } = await import("./client");
+    const { searchBasicBondInfo } = await import("./client");
 
-    await expect(searchBonds("26")).resolves.toEqual([]);
+    await expect(searchBasicBondInfo("26")).resolves.toEqual([]);
 
     expect(fetchMock).not.toHaveBeenCalled();
   });

@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   getBasicBondInfo,
   getBondDetails,
-  searchBonds,
   searchBasicBondInfo,
 } from ".";
 
 describe("MOEX ISS client integration", () => {
   it("merges live search results with the primary-board snapshot", async () => {
-    const results = await searchBonds("SU26233");
+    const results = await searchBasicBondInfo("SU26233");
     const bond = results.find((item) => item.secid === "SU26233RMFS5");
 
     expect(bond).toMatchObject({

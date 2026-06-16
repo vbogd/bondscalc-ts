@@ -38,7 +38,7 @@ let primaryBondSnapshotCache:
     }
   | null = null;
 
-export async function searchBonds(
+export async function searchBasicBondInfo(
   query: string,
   limit = DEFAULT_SEARCH_LIMIT,
 ): Promise<BasicBondInfo[]> {
@@ -83,14 +83,7 @@ export async function getBasicBondInfo({
   return bond;
 }
 
-export async function searchBasicBondInfo(
-  query: string,
-  limit = DEFAULT_SEARCH_LIMIT,
-): Promise<BasicBondInfo[]> {
-  return searchBonds(query, limit);
-}
-
-export async function getPrimaryBondSnapshot(): Promise<BasicBondInfo[]> {
+async function getPrimaryBondSnapshot(): Promise<BasicBondInfo[]> {
   const now = Date.now();
 
   if (primaryBondSnapshotCache && primaryBondSnapshotCache.expiresAt > now) {
