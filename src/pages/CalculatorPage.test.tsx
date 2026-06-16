@@ -45,11 +45,12 @@ describe("CalculatorPage", () => {
     expect(screen.queryByText("SECID")).not.toBeInTheDocument();
     expect(screen.queryByText("RU000A_TEST")).not.toBeInTheDocument();
     expect(screen.queryByText("Board")).not.toBeInTheDocument();
-    expect(screen.queryByText("НКД")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Оферта" })).toHaveClass("bg-blue-600");
-    expect(screen.getByLabelText("цена выхода, %")).toHaveValue("99.5");
-    expect(screen.getByText("168,70 ₽")).toBeInTheDocument();
-    expect(screen.getByText("18,48 %")).toBeInTheDocument();
+    expect(screen.getByLabelText("цена продажи, %")).toHaveValue("99.5");
+    expect(screen.getByText("158,52 ₽")).toBeInTheDocument();
+    expect(screen.getByText("17,37 %")).toBeInTheDocument();
+    expect(screen.getByText("НКД покупки")).toBeInTheDocument();
+    expect(screen.getByText("купоны за период")).toBeInTheDocument();
   });
 
   it("disables offer mode and falls back to maturity when there is no offer", async () => {
@@ -63,7 +64,7 @@ describe("CalculatorPage", () => {
     expect(await screen.findByRole("heading", { name: "Тест 001" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Погашение" })).toHaveClass("bg-blue-600");
     expect(screen.getByRole("button", { name: "Оферта" })).toBeDisabled();
-    expect(screen.getByLabelText("дата выхода")).toHaveValue("2030-06-15");
+    expect(screen.getByLabelText("дата продажи")).toHaveValue("2030-06-15");
   });
 
   it("switches to sale mode and recalculates after field changes", async () => {
@@ -80,10 +81,10 @@ describe("CalculatorPage", () => {
 
     expect(screen.getByLabelText("дата продажи")).toHaveValue("2026-06-16");
     expect(screen.getByLabelText("цена продажи, %")).toHaveValue("110");
-    expect(screen.getByText("173,24 ₽")).toBeInTheDocument();
-    expect(screen.getByText("6 927,33 %")).toBeInTheDocument();
+    expect(screen.getByText("173,37 ₽")).toBeInTheDocument();
+    expect(screen.getByText("6 932,56 %")).toBeInTheDocument();
+    expect(screen.getByText("НКД продажи")).toBeInTheDocument();
     expect(screen.queryByText("купоны, оценка")).not.toBeInTheDocument();
-    expect(screen.queryByText("к покупке")).not.toBeInTheDocument();
   });
 
   it("shows an error state when bond data cannot be loaded", async () => {

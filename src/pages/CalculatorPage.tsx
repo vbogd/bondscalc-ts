@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getBasicBondInfo, getBondDetails } from "../shared/api/moex";
 import type { BasicBondInfo, BondDetails, LocalDate } from "../shared/api/moex";
+import { calculateBondTrade } from "../shared/domain/bondTradeCalculator";
 
 type CalculatorMode = "maturity" | "offer" | "sale";
 
@@ -23,6 +24,17 @@ type ResultRow = {
   label: string;
   value: string;
   strong?: boolean;
+};
+
+type ResultSection = {
+  title: string;
+  rows: ResultRow[];
+};
+
+type CalculationView = {
+  summaryRows: ResultRow[];
+  detailSections: ResultSection[];
+  warnings: string[];
 };
 
 const DEFAULT_COMMISSION_PERCENT = "0.05";
@@ -70,14 +82,15 @@ export function CalculatorPage() {
     setForm(createFormFromBond(data.basicInfo, targetDates, initialMode));
   }, [data, targetDates]);
 
-  const resultRows = useMemo(
+  const calculationView = useMemo(
     () =>
-      calculateDraftResults({
+      createCalculationView({
+        bond: data?.basicInfo ?? null,
         form,
         mode,
         accruedInterest: data?.basicInfo.nkd ?? null,
       }),
-    [data?.basicInfo.nkd, form, mode],
+    [data?.basicInfo, form, mode],
   );
 
   const title = data?.details.shortName ?? data?.basicInfo.shortname ?? normalizedSecid;
@@ -222,13 +235,13 @@ export function CalculatorPage() {
 
           <div className="grid grid-cols-2 gap-2">
             <InputField
-              label={mode === "sale" ? "дата продажи" : "дата выхода"}
+              label="дата продажи"
               onChange={(value) => updateField("sellDate", value)}
               type="date"
               value={form.sellDate}
             />
             <InputField
-              label={mode === "sale" ? "цена продажи, %" : "цена выхода, %"}
+              label="цена продажи, %"
               onChange={(value) => updateField("sellPrice", value)}
               value={form.sellPrice}
             />
@@ -238,14 +251,39 @@ export function CalculatorPage() {
             <div className="border-b border-neutral-200 px-4 py-4">
               <h2 className="text-xl font-semibold text-neutral-950">Результаты</h2>
               <p className="mt-1 text-sm text-neutral-500">
-                Черновой расчет: купоны оцениваются равномерно по ставке.
+                НКД продажи считается по ближайшему купону и дневному накоплению.
               </p>
             </div>
             <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 px-4 py-5 text-xl">
-              {resultRows.map((row) => (
+              {calculationView.summaryRows.map((row) => (
                 <ResultItem key={row.label} {...row} />
               ))}
             </dl>
+            {calculationView.warnings.length > 0 ? (
+              <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {calculationView.warnings.join(" ")}
+              </div>
+            ) : null}
+          </section>
+
+          <section className="overflow-hidden rounded-lg border border-neutral-300 bg-white">
+            <div className="border-b border-neutral-200 px-4 py-4">
+              <h2 className="text-xl font-semibold text-neutral-950">Детализация</h2>
+            </div>
+            <div className="divide-y divide-neutral-200">
+              {calculationView.detailSections.map((section) => (
+                <div className="px-4 py-4" key={section.title}>
+                  <h3 className="text-sm font-semibold uppercase text-neutral-500">
+                    {section.title}
+                  </h3>
+                  <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-base">
+                    {section.rows.map((row) => (
+                      <ResultItem key={`${section.title}-${row.label}`} {...row} />
+                    ))}
+                  </dl>
+                </div>
+              ))}
+            </div>
           </section>
         </>
       )}
@@ -402,14 +440,17 @@ function getModePrice(mode: CalculatorMode, targetDates: TargetDates): string {
   return DEFAULT_SELL_PRICE;
 }
 
-function calculateDraftResults({
+function createCalculationView({
   accruedInterest,
+  bond,
   form,
+  mode,
 }: {
   accruedInterest: number | null;
+  bond: BasicBondInfo | null;
   form: CalculatorForm;
   mode: CalculatorMode;
-}): ResultRow[] {
+}): CalculationView {
   const faceValue = parseDecimal(form.faceValue);
   const couponPercent = parseDecimal(form.couponPercent);
   const commissionPercent = parseDecimal(form.commissionPercent);
@@ -425,43 +466,164 @@ function calculateDraftResults({
     taxPercent === null ||
     buyPrice === null ||
     sellPrice === null ||
-    days === null
+    days === null ||
+    !bond
   ) {
-    return createEmptyResults();
+    return createEmptyCalculationView();
   }
 
-  const buyAmount = (faceValue * buyPrice) / 100;
-  const sellAmount = (faceValue * sellPrice) / 100;
-  const buyCommission = (buyAmount * commissionPercent) / 100;
-  const sellCommission = (sellAmount * commissionPercent) / 100;
-  const purchaseCost = buyAmount + (accruedInterest ?? 0) + buyCommission;
-  const couponIncome = (faceValue * couponPercent * days) / 36500;
-  const grossProfit = sellAmount - buyAmount + couponIncome;
-  const tax = Math.max(grossProfit, 0) * (taxPercent / 100);
-  const profit = grossProfit - tax - buyCommission - sellCommission;
-  const annualYield =
-    purchaseCost > 0 && days > 0 ? (profit / purchaseCost / days) * 365 * 100 : null;
-  const currentYield = buyPrice > 0 ? (couponPercent * 100) / buyPrice : null;
+  const result = calculateBondTrade({
+    currentNominal: faceValue,
+    buyPricePercent: buyPrice,
+    exitPricePercent: sellPrice,
+    buyDate: form.buyDate,
+    exitDate: form.sellDate,
+    buyAccruedInterest: accruedInterest ?? 0,
+    commissionPercent,
+    exitCommissionPercent: mode === "sale" ? commissionPercent : 0,
+    taxPercent,
+    couponAnnualPercent: couponPercent,
+    couponValue: bond.coupon_value,
+    couponPeriodDays: bond.coupon_period,
+    coupons: createKnownCoupons(bond, form.sellDate),
+    amortizations: [],
+  });
+  const currency = bond.currency_id;
 
-  return [
-    {
-      label: "доходность, год",
-      value: formatPercent(annualYield),
-      strong: true,
-    },
-    { label: "тек. доходность", value: formatPercent(currentYield) },
-    { label: "прибыль", value: formatMoney(profit, "RUB") },
-    { label: "срок, дней", value: formatNumber(days) },
-  ];
+  return {
+    summaryRows: [
+      {
+        label: "прибыль после налога",
+        value: formatMoney(result.profitAfterTax, currency),
+        strong: true,
+      },
+      {
+        label: "доходность, год",
+        value: formatPercent(result.annualizedReturnPercent),
+      },
+      { label: "срок, дней", value: formatNumber(result.holdingDays) },
+    ],
+    detailSections: [
+      {
+        title: "Покупка",
+        rows: [
+          { label: "чистая цена", value: formatMoney(result.buyCleanAmount, currency) },
+          {
+            label: "НКД покупки",
+            value: formatMoney(result.buyAccruedInterest, currency),
+          },
+          { label: "комиссия", value: formatMoney(result.buyCommission, currency) },
+          {
+            label: "итого списано",
+            value: formatMoney(result.totalPaid, currency),
+            strong: true,
+          },
+        ],
+      },
+      {
+        title: "Продажа",
+        rows: [
+          {
+            label: "чистая цена продажи",
+            value: formatMoney(result.exitCleanAmount, currency),
+          },
+          {
+            label: "НКД продажи",
+            value: formatMoney(result.exitAccruedInterest, currency),
+          },
+          {
+            label: "комиссия продажи",
+            value: formatMoney(result.exitCommission, currency),
+          },
+          {
+            label: "купоны за период",
+            value: formatMoney(result.couponsReceived, currency),
+          },
+          {
+            label: "амортизация за период",
+            value: formatMoney(result.amortizationsReceived, currency),
+          },
+          {
+            label: "итого получено",
+            value: formatMoney(result.totalReceived, currency),
+            strong: true,
+          },
+        ],
+      },
+      {
+        title: "Налог и результат",
+        rows: [
+          {
+            label: "прибыль до налога",
+            value: formatMoney(result.profitBeforeTax, currency),
+          },
+          { label: "налог", value: formatMoney(result.tax, currency) },
+          {
+            label: "купонный эффект",
+            value: formatMoney(result.couponEffect, currency),
+          },
+        ],
+      },
+    ],
+    warnings: result.warnings,
+  };
 }
 
-function createEmptyResults(): ResultRow[] {
-  return [
-    { label: "доходность, год", value: "—", strong: true },
-    { label: "тек. доходность", value: "—" },
-    { label: "прибыль", value: "—" },
-    { label: "срок, дней", value: "—" },
-  ];
+function createKnownCoupons(bond: BasicBondInfo, exitDate: LocalDate) {
+  if (!bond.coupon_date || bond.coupon_value === null || bond.coupon_period <= 0) {
+    return [];
+  }
+
+  const coupons = [];
+  let couponDate = bond.coupon_date;
+
+  while (couponDate <= exitDate && coupons.length < 200) {
+    coupons.push({ date: couponDate, amount: bond.coupon_value });
+    couponDate = addDays(couponDate, bond.coupon_period);
+  }
+
+  return coupons;
+}
+
+function createEmptyCalculationView(): CalculationView {
+  return {
+    summaryRows: [
+      { label: "прибыль после налога", value: "—", strong: true },
+      { label: "доходность, год", value: "—" },
+      { label: "срок, дней", value: "—" },
+    ],
+    detailSections: [
+      {
+        title: "Покупка",
+        rows: [
+          { label: "чистая цена", value: "—" },
+          { label: "НКД покупки", value: "—" },
+          { label: "комиссия", value: "—" },
+          { label: "итого списано", value: "—", strong: true },
+        ],
+      },
+      {
+        title: "Продажа",
+        rows: [
+          { label: "чистая цена продажи", value: "—" },
+          { label: "НКД продажи", value: "—" },
+          { label: "комиссия продажи", value: "—" },
+          { label: "купоны за период", value: "—" },
+          { label: "амортизация за период", value: "—" },
+          { label: "итого получено", value: "—", strong: true },
+        ],
+      },
+      {
+        title: "Налог и результат",
+        rows: [
+          { label: "прибыль до налога", value: "—" },
+          { label: "налог", value: "—" },
+          { label: "купонный эффект", value: "—" },
+        ],
+      },
+    ],
+    warnings: [],
+  };
 }
 
 function parseDecimal(value: string): number | null {
