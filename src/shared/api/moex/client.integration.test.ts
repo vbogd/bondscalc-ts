@@ -2,25 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   getBasicBondInfo,
   getBondDetails,
-  searchBondRefs,
   searchBonds,
   searchBasicBondInfo,
 } from ".";
 
 describe("MOEX ISS client integration", () => {
-  it("finds Russian bonds through the live ISS search endpoint", async () => {
-    const results = await searchBondRefs("SU26233");
-
-    expect(results).toContainEqual(
-      expect.objectContaining({
-        secid: "SU26233RMFS5",
-        isin: "RU000A101F94",
-        shortName: "ОФЗ 26233",
-        primaryBoardId: "TQOB",
-      }),
-    );
-  });
-
   it("merges live search results with the primary-board snapshot", async () => {
     const results = await searchBonds("SU26233");
     const bond = results.find((item) => item.secid === "SU26233RMFS5");

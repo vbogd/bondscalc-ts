@@ -2,10 +2,9 @@ import {
   MIN_BOND_SEARCH_QUERY_LENGTH,
   normalizeBasicBondInfoResponse,
   normalizeBondDetailsResponses,
-  normalizeBondSearchRefsResponse,
   normalizePrimaryBondSnapshot,
 } from "./bonds";
-import type { BasicBondInfo, BondDetails, BondSearchRef } from "./types";
+import type { BasicBondInfo, BondDetails } from "./types";
 
 const MOEX_ISS_BASE_URL = "https://iss.moex.com/iss";
 const DEFAULT_SEARCH_LIMIT = 100;
@@ -38,27 +37,6 @@ let primaryBondSnapshotCache:
       promise: Promise<BasicBondInfo[]>;
     }
   | null = null;
-
-export async function searchBondRefs(
-  query: string,
-  limit = DEFAULT_SEARCH_LIMIT,
-): Promise<BondSearchRef[]> {
-  const normalizedQuery = query.trim();
-
-  if (normalizedQuery.length < MIN_BOND_SEARCH_QUERY_LENGTH) {
-    return [];
-  }
-
-  return normalizeBondSearchRefsResponse(
-    await moexFetchJson("/securities.json", {
-      q: normalizedQuery,
-      engine: "stock",
-      market: "bonds",
-      is_trading: "1",
-      limit: String(limit),
-    }),
-  );
-}
 
 export async function searchBonds(
   query: string,
