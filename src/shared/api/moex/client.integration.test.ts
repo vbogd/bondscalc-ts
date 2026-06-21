@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getBasicBondInfo,
   getBondDetails,
+  getHistoricalBondSnapshot,
   searchBasicBondInfo,
 } from ".";
 
@@ -70,6 +71,22 @@ describe("MOEX ISS client integration", () => {
       maturityDate: "2035-07-18",
     });
     expect(Array.isArray(details.offerSchedule)).toBe(true);
+    expect(details.couponSchedule.length).toBeGreaterThan(20);
+    expect(Array.isArray(details.amortizationSchedule)).toBe(true);
+  });
+
+  it("loads historical accrued interest for a trading date", async () => {
+    const snapshot = await getHistoricalBondSnapshot({
+      secid: "SU26233RMFS5",
+      boardId: "TQOB",
+      date: "2026-06-15",
+    });
+
+    expect(snapshot).toMatchObject({
+      tradeDate: "2026-06-15",
+      accruedInterest: expect.any(Number),
+      faceValue: 1000,
+    });
   });
 
   it("loads the live calculator payload for a selected bond", async () => {

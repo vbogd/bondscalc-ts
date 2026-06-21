@@ -68,6 +68,27 @@ export type BondOfferScheduleItem = {
   type: string | null;
 };
 
+export type BondCouponScheduleItem = {
+  date: LocalDate;
+  startDate: LocalDate | null;
+  amount: number | null;
+  annualPercent: number | null;
+};
+
+export type BondAmortizationScheduleItem = {
+  date: LocalDate;
+  amount: number | null;
+  percent: number | null;
+};
+
+export type HistoricalBondSnapshot = {
+  tradeDate: LocalDate;
+  accruedInterest: number;
+  couponAmount: number | null;
+  couponAnnualPercent: number | null;
+  faceValue: number | null;
+};
+
 export type BondDetails = {
   secid: string;
   isin: string | null;
@@ -77,4 +98,6 @@ export type BondDetails = {
   maturityDate: LocalDate | null;
   nextOfferDate: LocalDate | null;
   offerSchedule: BondOfferScheduleItem[];
+  couponSchedule: BondCouponScheduleItem[];
+  amortizationSchedule: BondAmortizationScheduleItem[];
 };

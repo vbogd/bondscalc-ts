@@ -7,11 +7,14 @@ import {
 } from "./issTable";
 import type {
   BasicBondInfo,
+  BondAmortizationScheduleItem,
   BondBoard,
+  BondCouponScheduleItem,
   BondDetails,
   BondListLevel,
   BondOfferScheduleItem,
   BondSearchRef,
+  HistoricalBondSnapshot,
   IssRow,
 } from "./types";
 
@@ -220,6 +223,72 @@ export function normalizeBondOfferSchedule(rows: IssRow[]): BondOfferScheduleIte
     .sort((left, right) => left.date.localeCompare(right.date));
 }
 
+export function normalizeBondCouponSchedule(rows: IssRow[]): BondCouponScheduleItem[] {
+  return rows
+    .map((row) => {
+      const date = getLocalDate(row, "coupondate");
+
+      if (!date) {
+        return null;
+      }
+
+      return {
+        date,
+        startDate: getLocalDate(row, "startdate"),
+        amount: getNumber(row, "value"),
+        annualPercent: getNumber(row, "valueprc"),
+      };
+    })
+    .filter((coupon) => coupon !== null)
+    .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+export function normalizeBondAmortizationSchedule(
+  rows: IssRow[],
+): BondAmortizationScheduleItem[] {
+  return rows
+    .map((row) => {
+      const date = getLocalDate(row, "amortdate");
+
+      if (!date) {
+        return null;
+      }
+
+      return {
+        date,
+        amount: getNumber(row, "value"),
+        percent: getNumber(row, "valueprc"),
+      };
+    })
+    .filter((amortization) => amortization !== null)
+    .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+export function normalizeHistoricalBondSnapshot(
+  response: unknown,
+): HistoricalBondSnapshot | null {
+  const row = normalizeTableFromResponse(response, "history").at(-1);
+
+  if (!row) {
+    return null;
+  }
+
+  const tradeDate = getLocalDate(row, "tradedate");
+  const accruedInterest = getNumber(row, "accint");
+
+  if (!tradeDate || accruedInterest === null) {
+    return null;
+  }
+
+  return {
+    tradeDate,
+    accruedInterest,
+    couponAmount: getNumber(row, "couponvalue"),
+    couponAnnualPercent: getNumber(row, "couponpercent"),
+    faceValue: getNumber(row, "facevalue"),
+  };
+}
+
 export function normalizeBondDetails({
   secid,
   searchResult,
@@ -227,6 +296,8 @@ export function normalizeBondDetails({
   boardRows,
   marketSecurityRows,
   offerRows,
+  couponRows = [],
+  amortizationRows = [],
 }: {
   secid: string;
   searchResult: BondSearchRef | null;
@@ -234,6 +305,8 @@ export function normalizeBondDetails({
   boardRows: IssRow[];
   marketSecurityRows: IssRow[];
   offerRows: IssRow[];
+  couponRows?: IssRow[];
+  amortizationRows?: IssRow[];
 }): BondDetails {
   const description = Object.fromEntries(
     descriptionRows
@@ -276,6 +349,8 @@ export function normalizeBondDetails({
       normalizeDescriptionDate(description.MATDATE),
     nextOfferDate: getLocalDate(selectedMarketSecurity ?? {}, "offerdate"),
     offerSchedule,
+    couponSchedule: normalizeBondCouponSchedule(couponRows),
+    amortizationSchedule: normalizeBondAmortizationSchedule(amortizationRows),
   };
 }
 
@@ -330,6 +405,8 @@ export function normalizeBondDetailsResponses({
     boardRows: normalizeTableFromResponse(securityResponse, "boards"),
     marketSecurityRows: normalizeTableFromResponse(marketResponse, "securities"),
     offerRows: normalizeTableFromResponse(bondizationResponse, "offers"),
+    couponRows: normalizeTableFromResponse(bondizationResponse, "coupons"),
+    amortizationRows: normalizeTableFromResponse(bondizationResponse, "amortizations"),
   });
 }
 

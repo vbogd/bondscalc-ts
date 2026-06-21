@@ -2,9 +2,10 @@ import {
   MIN_BOND_SEARCH_QUERY_LENGTH,
   normalizeBasicBondInfoResponse,
   normalizeBondDetailsResponses,
+  normalizeHistoricalBondSnapshot,
   normalizePrimaryBondSnapshot,
 } from "./bonds";
-import type { BasicBondInfo, BondDetails } from "./types";
+import type { BasicBondInfo, BondDetails, HistoricalBondSnapshot, LocalDate } from "./types";
 
 const MOEX_ISS_BASE_URL = "https://iss.moex.com/iss";
 const DEFAULT_SEARCH_LIMIT = 100;
@@ -122,7 +123,13 @@ export async function getBondDetails(secid: string): Promise<BondDetails> {
           normalizedSecid,
         )}.json`,
       ),
-      moexFetchJson(`/securities/${encodeURIComponent(normalizedSecid)}/bondization.json`),
+      moexFetchJson(`/securities/${encodeURIComponent(normalizedSecid)}/bondization.json`, {
+        "iss.only": "coupons,amortizations,offers",
+        limit: "unlimited",
+        "coupons.columns": "coupondate,value,valueprc,startdate",
+        "amortizations.columns": "amortdate,value,valueprc",
+        "offers.columns": "offerdate,price,value,offertype",
+      }),
     ]);
 
   return normalizeBondDetailsResponses({
@@ -132,6 +139,38 @@ export async function getBondDetails(secid: string): Promise<BondDetails> {
     marketResponse,
     bondizationResponse,
   });
+}
+
+export async function getHistoricalBondSnapshot({
+  secid,
+  boardId,
+  date,
+}: {
+  secid: string;
+  boardId: string;
+  date: LocalDate;
+}): Promise<HistoricalBondSnapshot> {
+  const normalizedSecid = secid.trim().toUpperCase();
+  const normalizedBoardId = boardId.trim().toUpperCase();
+  const response = await moexFetchJson(
+    `/history/engines/stock/markets/bonds/boards/${encodeURIComponent(
+      normalizedBoardId,
+    )}/securities/${encodeURIComponent(normalizedSecid)}.json`,
+    {
+      from: date,
+      till: date,
+      "iss.only": "history",
+      "history.columns":
+        "TRADEDATE,ACCINT,COUPONVALUE,COUPONPERCENT,FACEVALUE",
+    },
+  );
+  const snapshot = normalizeHistoricalBondSnapshot(response);
+
+  if (!snapshot) {
+    throw new Error(`MOEX не вернула данные торгов за ${date}.`);
+  }
+
+  return snapshot;
 }
 
 async function moexFetchJson(

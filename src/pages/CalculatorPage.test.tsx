@@ -1,10 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { BasicBondInfo, BondDetails } from "../shared/api/moex";
-import { getBasicBondInfo, getBondDetails } from "../shared/api/moex";
+import {
+  getBasicBondInfo,
+  getBondDetails,
+  getHistoricalBondSnapshot,
+} from "../shared/api/moex";
 import { CalculatorPage } from "./CalculatorPage";
 
 vi.mock("../shared/api/moex", async (importOriginal) => {
@@ -14,11 +18,13 @@ vi.mock("../shared/api/moex", async (importOriginal) => {
     ...actual,
     getBasicBondInfo: vi.fn(),
     getBondDetails: vi.fn(),
+    getHistoricalBondSnapshot: vi.fn(),
   };
 });
 
 const getBasicBondInfoMock = vi.mocked(getBasicBondInfo);
 const getBondDetailsMock = vi.mocked(getBondDetails);
+const getHistoricalBondSnapshotMock = vi.mocked(getHistoricalBondSnapshot);
 
 describe("CalculatorPage", () => {
   beforeEach(() => {
@@ -26,6 +32,7 @@ describe("CalculatorPage", () => {
     vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
     getBasicBondInfoMock.mockReset();
     getBondDetailsMock.mockReset();
+    getHistoricalBondSnapshotMock.mockReset();
   });
 
   afterEach(() => {
@@ -50,7 +57,7 @@ describe("CalculatorPage", () => {
     expect(screen.getByText("158,52 ₽")).toBeInTheDocument();
     expect(screen.getByText("17,37 %")).toBeInTheDocument();
     expect(screen.getByText("НКД покупки")).toBeInTheDocument();
-    expect(screen.getByText("купоны за период")).toBeInTheDocument();
+    expect(screen.getByText("получено купонов")).toBeInTheDocument();
   });
 
   it("disables offer mode and falls back to maturity when there is no offer", async () => {
@@ -87,6 +94,29 @@ describe("CalculatorPage", () => {
     expect(screen.queryByText("купоны, оценка")).not.toBeInTheDocument();
   });
 
+  it("uses today as the sale date when the buy date is in the past", async () => {
+    const user = userEvent.setup();
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+    getHistoricalBondSnapshotMock.mockResolvedValue({
+      tradeDate: "2026-06-10",
+      accruedInterest: 7.5,
+      couponAmount: 50,
+      couponAnnualPercent: 10,
+      faceValue: 1000,
+    });
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    fireEvent.change(screen.getByLabelText("дата сделки"), {
+      target: { value: "2026-06-10" },
+    });
+    await user.click(screen.getByRole("button", { name: "Продажа" }));
+
+    expect(screen.getByLabelText("дата продажи")).toHaveValue("2026-06-15");
+  });
+
   it("shows an error state when bond data cannot be loaded", async () => {
     getBasicBondInfoMock.mockRejectedValue(new Error("MOEX request failed"));
     getBondDetailsMock.mockResolvedValue(createDetails());
@@ -95,6 +125,57 @@ describe("CalculatorPage", () => {
 
     expect(await screen.findByText("Не удалось открыть калькулятор")).toBeInTheDocument();
     expect(screen.getByText("MOEX request failed")).toBeInTheDocument();
+  });
+
+  it("loads accrued interest for a historical buy date", async () => {
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+    getHistoricalBondSnapshotMock.mockResolvedValue({
+      tradeDate: "2026-06-10",
+      accruedInterest: 7.5,
+      couponAmount: 50,
+      couponAnnualPercent: 10,
+      faceValue: 900,
+    });
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    fireEvent.change(screen.getByLabelText("дата сделки"), {
+      target: { value: "2026-06-10" },
+    });
+
+    expect(await screen.findByText("7,50 ₽")).toBeInTheDocument();
+    expect(screen.getByLabelText("номинал")).toHaveValue("900");
+    expect(getHistoricalBondSnapshotMock).toHaveBeenCalledWith({
+      secid: "RU000A_TEST",
+      boardId: "TQOB",
+      date: "2026-06-10",
+    });
+  });
+
+  it("marks unknown future coupons as a forecast", async () => {
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(
+      createDetails({
+        couponSchedule: [
+          {
+            date: "2026-12-15",
+            startDate: "2026-06-16",
+            amount: null,
+            annualPercent: null,
+          },
+        ],
+      }),
+    );
+
+    renderCalculatorPage();
+
+    expect(
+      await screen.findByText(
+        "1 будущий купон рассчитан прогнозно по ставке 10 %.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 
@@ -159,6 +240,21 @@ function createDetails(overrides: Partial<BondDetails> = {}): BondDetails {
         type: "put",
       },
     ],
+    couponSchedule: [
+      {
+        date: "2026-12-15",
+        startDate: "2026-06-16",
+        amount: 50,
+        annualPercent: 10,
+      },
+      {
+        date: "2027-06-15",
+        startDate: "2026-12-15",
+        amount: 50,
+        annualPercent: 10,
+      },
+    ],
+    amortizationSchedule: [],
     ...overrides,
   };
 }

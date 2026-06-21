@@ -55,6 +55,47 @@ describe("MOEX ISS client", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("loads historical bond data for an exact trading date", async () => {
+    const fetchMock = vi.fn(async (_url: URL): Promise<FetchResponse> => ({
+      ok: true,
+      json: async () => ({
+        history: {
+          columns: [
+            "TRADEDATE",
+            "ACCINT",
+            "COUPONVALUE",
+            "COUPONPERCENT",
+            "FACEVALUE",
+          ],
+          data: [["2026-06-15", 23.07, 30.42, 6.1, 1000]],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getHistoricalBondSnapshot } = await import("./client");
+
+    await expect(
+      getHistoricalBondSnapshot({
+        secid: "su26233rmfs5",
+        boardId: "tqob",
+        date: "2026-06-15",
+      }),
+    ).resolves.toEqual({
+      tradeDate: "2026-06-15",
+      accruedInterest: 23.07,
+      couponAmount: 30.42,
+      couponAnnualPercent: 6.1,
+      faceValue: 1000,
+    });
+
+    const url = getFetchUrl(fetchMock);
+    expect(url.pathname).toBe(
+      "/iss/history/engines/stock/markets/bonds/boards/TQOB/securities/SU26233RMFS5.json",
+    );
+    expect(url.searchParams.get("from")).toBe("2026-06-15");
+    expect(url.searchParams.get("till")).toBe("2026-06-15");
+  });
 });
 
 function mockSnapshotFetch() {
@@ -68,7 +109,7 @@ function mockSnapshotFetch() {
   return fetchMock;
 }
 
-function getFetchUrl(fetchMock: ReturnType<typeof mockSnapshotFetch>) {
+function getFetchUrl(fetchMock: ReturnType<typeof vi.fn>) {
   const firstCall = fetchMock.mock.calls[0];
   const url: unknown = firstCall?.[0];
 

@@ -3,8 +3,18 @@ import { AlertCircle, ArrowLeft, Loader2, Search } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getBasicBondInfo, getBondDetails } from "../shared/api/moex";
-import type { BasicBondInfo, BondDetails, LocalDate } from "../shared/api/moex";
+import {
+  getBasicBondInfo,
+  getBondDetails,
+  getHistoricalBondSnapshot,
+} from "../shared/api/moex";
+import type {
+  BasicBondInfo,
+  BondAmortizationScheduleItem,
+  BondCouponScheduleItem,
+  BondDetails,
+  LocalDate,
+} from "../shared/api/moex";
 import { calculateBondTrade } from "../shared/domain/bondTradeCalculator";
 
 type CalculatorMode = "maturity" | "offer" | "sale";
@@ -65,6 +75,27 @@ export function CalculatorPage() {
       return { basicInfo, details };
     },
   });
+  const historicalBuyDate = isPastLocalDate(form.buyDate) ? form.buyDate : null;
+  const historicalSnapshotQuery = useQuery({
+    queryKey: [
+      "bond-calculator-history",
+      normalizedSecid,
+      data?.details.boardId,
+      historicalBuyDate,
+    ],
+    queryFn: () => {
+      if (!data || !historicalBuyDate) {
+        throw new Error("Не удалось определить параметры исторического запроса.");
+      }
+
+      return getHistoricalBondSnapshot({
+        secid: normalizedSecid,
+        boardId: data.details.boardId,
+        date: historicalBuyDate,
+      });
+    },
+    enabled: Boolean(data && historicalBuyDate),
+  });
 
   const targetDates = useMemo(
     () => (data ? getTargetDates(data.basicInfo, data.details) : null),
@@ -82,15 +113,50 @@ export function CalculatorPage() {
     setForm(createFormFromBond(data.basicInfo, targetDates, initialMode));
   }, [data, targetDates]);
 
+  useEffect(() => {
+    const faceValue = historicalBuyDate
+      ? historicalSnapshotQuery.data?.faceValue
+      : data?.basicInfo.face_value;
+
+    if (faceValue === null || faceValue === undefined) {
+      return;
+    }
+
+    setForm((currentForm) => ({
+      ...currentForm,
+      faceValue: formatInputNumber(faceValue),
+    }));
+  }, [data?.basicInfo.face_value, historicalBuyDate, historicalSnapshotQuery.data]);
+
   const calculationView = useMemo(
     () =>
       createCalculationView({
         bond: data?.basicInfo ?? null,
+        details: data?.details ?? null,
         form,
         mode,
-        accruedInterest: data?.basicInfo.nkd ?? null,
+        accruedInterest: historicalBuyDate
+          ? historicalSnapshotQuery.data?.accruedInterest ?? null
+          : data?.basicInfo.nkd ?? null,
+        accruedInterestMessage: historicalBuyDate
+          ? historicalSnapshotQuery.isError
+            ? getErrorMessage(historicalSnapshotQuery.error)
+            : historicalSnapshotQuery.isLoading
+              ? "Загружаем исторический НКД из MOEX."
+              : null
+          : null,
       }),
-    [data?.basicInfo, form, mode],
+    [
+      data?.basicInfo,
+      data?.details,
+      form,
+      historicalBuyDate,
+      historicalSnapshotQuery.data,
+      historicalSnapshotQuery.error,
+      historicalSnapshotQuery.isError,
+      historicalSnapshotQuery.isLoading,
+      mode,
+    ],
   );
 
   const title = data?.details.shortName ?? data?.basicInfo.shortname ?? normalizedSecid;
@@ -109,7 +175,9 @@ export function CalculatorPage() {
       sellDate: getModeDate(
         nextMode,
         targetDates,
-        nextMode === "sale" ? addDays(currentForm.buyDate, 1) : currentForm.sellDate,
+        nextMode === "sale"
+          ? getDefaultSaleDate(currentForm.buyDate)
+          : currentForm.sellDate,
       ),
       sellPrice: getModePrice(nextMode, targetDates),
     }));
@@ -195,7 +263,7 @@ export function CalculatorPage() {
             <h2 className="text-xl font-semibold text-neutral-950">Покупка</h2>
             <div className="grid grid-cols-2 gap-2">
               <InputField
-                label="дата"
+                label="дата сделки"
                 onChange={(value) => updateField("buyDate", value)}
                 type="date"
                 value={form.buyDate}
@@ -440,14 +508,22 @@ function getModePrice(mode: CalculatorMode, targetDates: TargetDates): string {
   return DEFAULT_SELL_PRICE;
 }
 
+function getDefaultSaleDate(buyDate: LocalDate): LocalDate {
+  return isPastLocalDate(buyDate) ? getTodayLocalDate() : addDays(buyDate, 1);
+}
+
 function createCalculationView({
   accruedInterest,
+  accruedInterestMessage,
   bond,
+  details,
   form,
   mode,
 }: {
   accruedInterest: number | null;
+  accruedInterestMessage: string | null;
   bond: BasicBondInfo | null;
+  details: BondDetails | null;
   form: CalculatorForm;
   mode: CalculatorMode;
 }): CalculationView {
@@ -467,10 +543,41 @@ function createCalculationView({
     buyPrice === null ||
     sellPrice === null ||
     days === null ||
-    !bond
+    !bond ||
+    !details
   ) {
     return createEmptyCalculationView();
   }
+
+  if (accruedInterest === null) {
+    return createEmptyCalculationView(
+      accruedInterestMessage ? [accruedInterestMessage] : [],
+    );
+  }
+
+  const amortizationProjection = createAmortizationCashFlows({
+    schedule: details.amortizationSchedule,
+    buyDate: form.buyDate,
+    exitDate: form.sellDate,
+    currentNominal: faceValue,
+  });
+  const couponProjection = createCouponCashFlows({
+    schedule: details.couponSchedule,
+    amortizations: amortizationProjection.cashFlows,
+    buyDate: form.buyDate,
+    exitDate: form.sellDate,
+    currentNominal: faceValue,
+    annualPercent: couponPercent,
+    fallbackCouponDate: bond.coupon_date,
+    fallbackCouponAmount: bond.coupon_value,
+    fallbackCouponPeriodDays: bond.coupon_period,
+  });
+  const exitAccrualTerms = getExitAccrualTerms({
+    schedule: details.couponSchedule,
+    exitDate: form.sellDate,
+    fallbackCouponAmount: bond.coupon_value,
+    fallbackCouponPeriodDays: bond.coupon_period,
+  });
 
   const result = calculateBondTrade({
     currentNominal: faceValue,
@@ -478,15 +585,16 @@ function createCalculationView({
     exitPricePercent: sellPrice,
     buyDate: form.buyDate,
     exitDate: form.sellDate,
-    buyAccruedInterest: accruedInterest ?? 0,
+    buyAccruedInterest: accruedInterest,
     commissionPercent,
     exitCommissionPercent: mode === "sale" ? commissionPercent : 0,
     taxPercent,
     couponAnnualPercent: couponPercent,
-    couponValue: bond.coupon_value,
-    couponPeriodDays: bond.coupon_period,
-    coupons: createKnownCoupons(bond, form.sellDate),
-    amortizations: [],
+    couponValue:
+      couponProjection.forecastCount > 0 ? null : exitAccrualTerms.couponAmount,
+    couponPeriodDays: exitAccrualTerms.couponPeriodDays,
+    coupons: couponProjection.cashFlows,
+    amortizations: amortizationProjection.cashFlows,
   });
   const currency = bond.currency_id;
 
@@ -536,7 +644,7 @@ function createCalculationView({
             value: formatMoney(result.exitCommission, currency),
           },
           {
-            label: "купоны за период",
+            label: "получено купонов",
             value: formatMoney(result.couponsReceived, currency),
           },
           {
@@ -565,27 +673,252 @@ function createCalculationView({
         ],
       },
     ],
-    warnings: result.warnings,
+    warnings: [
+      ...result.warnings,
+      ...createCashFlowWarnings({
+        forecastCouponCount: couponProjection.forecastCount,
+        missingCouponCount: couponProjection.missingCount,
+        missingAmortizationCount: amortizationProjection.missingCount,
+        annualPercent: couponPercent,
+      }),
+    ],
   };
 }
 
-function createKnownCoupons(bond: BasicBondInfo, exitDate: LocalDate) {
-  if (!bond.coupon_date || bond.coupon_value === null || bond.coupon_period <= 0) {
+type CashFlow = {
+  date: LocalDate;
+  amount: number;
+};
+
+function createCouponCashFlows({
+  schedule,
+  amortizations,
+  buyDate,
+  exitDate,
+  currentNominal,
+  annualPercent,
+  fallbackCouponDate,
+  fallbackCouponAmount,
+  fallbackCouponPeriodDays,
+}: {
+  schedule: BondCouponScheduleItem[];
+  amortizations: CashFlow[];
+  buyDate: LocalDate;
+  exitDate: LocalDate;
+  currentNominal: number;
+  annualPercent: number;
+  fallbackCouponDate: LocalDate;
+  fallbackCouponAmount: number | null;
+  fallbackCouponPeriodDays: number;
+}): {
+  cashFlows: CashFlow[];
+  forecastCount: number;
+  missingCount: number;
+} {
+  if (schedule.length === 0) {
+    const fallbackCashFlows = createFallbackCouponCashFlows({
+      buyDate,
+      exitDate,
+      couponDate: fallbackCouponDate,
+      couponAmount: fallbackCouponAmount,
+      couponPeriodDays: fallbackCouponPeriodDays,
+    });
+
+    return {
+      cashFlows: fallbackCashFlows,
+      forecastCount: fallbackCashFlows.length,
+      missingCount: 0,
+    };
+  }
+
+  const today = getTodayLocalDate();
+  const cashFlows: CashFlow[] = [];
+  let forecastCount = 0;
+  let missingCount = 0;
+
+  for (const coupon of schedule) {
+    if (coupon.date <= buyDate || coupon.date > exitDate) {
+      continue;
+    }
+
+    if (coupon.amount !== null) {
+      cashFlows.push({ date: coupon.date, amount: coupon.amount });
+      continue;
+    }
+
+    const couponPeriodDays = coupon.startDate
+      ? getDaysBetween(coupon.startDate, coupon.date)
+      : fallbackCouponPeriodDays;
+
+    if (
+      coupon.date <= today ||
+      annualPercent <= 0 ||
+      couponPeriodDays === null ||
+      couponPeriodDays <= 0
+    ) {
+      missingCount += 1;
+      continue;
+    }
+
+    const nominalReduction = amortizations
+      .filter(
+        (amortization) =>
+          amortization.date > buyDate && amortization.date < coupon.date,
+      )
+      .reduce((sum, amortization) => sum + amortization.amount, 0);
+    const nominalAtCoupon = Math.max(currentNominal - nominalReduction, 0);
+    const amount =
+      (nominalAtCoupon * annualPercent * couponPeriodDays) / 36_500;
+
+    cashFlows.push({ date: coupon.date, amount });
+    forecastCount += 1;
+  }
+
+  return { cashFlows, forecastCount, missingCount };
+}
+
+function createFallbackCouponCashFlows({
+  buyDate,
+  exitDate,
+  couponDate,
+  couponAmount,
+  couponPeriodDays,
+}: {
+  buyDate: LocalDate;
+  exitDate: LocalDate;
+  couponDate: LocalDate;
+  couponAmount: number | null;
+  couponPeriodDays: number;
+}): CashFlow[] {
+  if (couponAmount === null || couponPeriodDays <= 0) {
     return [];
   }
 
-  const coupons = [];
-  let couponDate = bond.coupon_date;
+  const coupons: CashFlow[] = [];
+  let nextCouponDate = couponDate;
 
-  while (couponDate <= exitDate && coupons.length < 200) {
-    coupons.push({ date: couponDate, amount: bond.coupon_value });
-    couponDate = addDays(couponDate, bond.coupon_period);
+  while (nextCouponDate <= exitDate && coupons.length < 200) {
+    if (nextCouponDate > buyDate) {
+      coupons.push({ date: nextCouponDate, amount: couponAmount });
+    }
+
+    nextCouponDate = addDays(nextCouponDate, couponPeriodDays);
   }
 
   return coupons;
 }
 
-function createEmptyCalculationView(): CalculationView {
+function createAmortizationCashFlows({
+  schedule,
+  buyDate,
+  exitDate,
+  currentNominal,
+}: {
+  schedule: BondAmortizationScheduleItem[];
+  buyDate: LocalDate;
+  exitDate: LocalDate;
+  currentNominal: number;
+}): { cashFlows: CashFlow[]; missingCount: number } {
+  const cashFlows: CashFlow[] = [];
+  let missingCount = 0;
+
+  for (const amortization of schedule) {
+    if (amortization.date <= buyDate || amortization.date > exitDate) {
+      continue;
+    }
+
+    const amount =
+      amortization.amount ??
+      (amortization.percent === null
+        ? null
+        : (currentNominal * amortization.percent) / 100);
+
+    if (amount === null) {
+      missingCount += 1;
+      continue;
+    }
+
+    cashFlows.push({ date: amortization.date, amount });
+  }
+
+  return { cashFlows, missingCount };
+}
+
+function getExitAccrualTerms({
+  schedule,
+  exitDate,
+  fallbackCouponAmount,
+  fallbackCouponPeriodDays,
+}: {
+  schedule: BondCouponScheduleItem[];
+  exitDate: LocalDate;
+  fallbackCouponAmount: number | null;
+  fallbackCouponPeriodDays: number;
+}): { couponAmount: number | null; couponPeriodDays: number } {
+  const containingCoupon = schedule.find((coupon) => coupon.date > exitDate);
+  const couponPeriodDays = containingCoupon?.startDate
+    ? getDaysBetween(containingCoupon.startDate, containingCoupon.date)
+    : null;
+
+  return {
+    couponAmount: containingCoupon?.amount ?? fallbackCouponAmount,
+    couponPeriodDays:
+      couponPeriodDays && couponPeriodDays > 0
+        ? couponPeriodDays
+        : fallbackCouponPeriodDays,
+  };
+}
+
+function createCashFlowWarnings({
+  forecastCouponCount,
+  missingCouponCount,
+  missingAmortizationCount,
+  annualPercent,
+}: {
+  forecastCouponCount: number;
+  missingCouponCount: number;
+  missingAmortizationCount: number;
+  annualPercent: number;
+}): string[] {
+  const warnings: string[] = [];
+
+  if (forecastCouponCount > 0) {
+    const forecastText = formatForecastCouponCount(forecastCouponCount);
+
+    warnings.push(
+      `${forecastCouponCount} ${forecastText} прогнозно по ставке ${formatInputNumber(annualPercent)} %.`,
+    );
+  }
+
+  if (missingCouponCount > 0) {
+    warnings.push(`Не удалось определить сумму купонов: ${missingCouponCount}.`);
+  }
+
+  if (missingAmortizationCount > 0) {
+    warnings.push(
+      `Не удалось определить сумму амортизаций: ${missingAmortizationCount}.`,
+    );
+  }
+
+  return warnings;
+}
+
+function formatForecastCouponCount(count: number): string {
+  const modulo10 = count % 10;
+  const modulo100 = count % 100;
+
+  if (modulo10 === 1 && modulo100 !== 11) {
+    return "будущий купон рассчитан";
+  }
+
+  if (modulo10 >= 2 && modulo10 <= 4 && (modulo100 < 12 || modulo100 > 14)) {
+    return "будущих купона рассчитаны";
+  }
+
+  return "будущих купонов рассчитаны";
+}
+
+function createEmptyCalculationView(warnings: string[] = []): CalculationView {
   return {
     summaryRows: [
       { label: "прибыль после налога", value: "—", strong: true },
@@ -608,7 +941,7 @@ function createEmptyCalculationView(): CalculationView {
           { label: "чистая цена продажи", value: "—" },
           { label: "НКД продажи", value: "—" },
           { label: "комиссия продажи", value: "—" },
-          { label: "купоны за период", value: "—" },
+          { label: "получено купонов", value: "—" },
           { label: "амортизация за период", value: "—" },
           { label: "итого получено", value: "—", strong: true },
         ],
@@ -622,7 +955,7 @@ function createEmptyCalculationView(): CalculationView {
         ],
       },
     ],
-    warnings: [],
+    warnings,
   };
 }
 
@@ -666,6 +999,10 @@ function getTodayLocalDate(): string {
   const day = String(now.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+function isPastLocalDate(date: LocalDate): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && date < getTodayLocalDate();
 }
 
 function isFutureOrToday(date: LocalDate): boolean {

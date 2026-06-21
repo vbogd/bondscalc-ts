@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   mergeMarketDataRows,
   normalizeBasicBondInfo,
+  normalizeBondAmortizationSchedule,
+  normalizeBondCouponSchedule,
   normalizeBondDetails,
+  normalizeHistoricalBondSnapshot,
   normalizeBondOfferSchedule,
   normalizeBondSearchRefs,
   normalizePrimaryBondSnapshot,
@@ -237,6 +240,69 @@ describe("normalizeBondOfferSchedule", () => {
   });
 });
 
+describe("bond cash flow schedule normalization", () => {
+  it("normalizes coupon and amortization rows", () => {
+    expect(
+      normalizeBondCouponSchedule([
+        {
+          coupondate: "2027-01-20",
+          startdate: "2026-07-20",
+          value: null,
+          valueprc: null,
+        },
+        {
+          coupondate: "2026-07-20",
+          startdate: "2026-01-19",
+          value: 42.38,
+          valueprc: 8.5,
+        },
+      ]),
+    ).toEqual([
+      {
+        date: "2026-07-20",
+        startDate: "2026-01-19",
+        amount: 42.38,
+        annualPercent: 8.5,
+      },
+      {
+        date: "2027-01-20",
+        startDate: "2026-07-20",
+        amount: null,
+        annualPercent: null,
+      },
+    ]);
+
+    expect(
+      normalizeBondAmortizationSchedule([
+        { amortdate: "2030-01-01", value: 500, valueprc: 50 },
+      ]),
+    ).toEqual([{ date: "2030-01-01", amount: 500, percent: 50 }]);
+  });
+
+  it("normalizes historical accrued interest", () => {
+    expect(
+      normalizeHistoricalBondSnapshot({
+        history: {
+          columns: [
+            "TRADEDATE",
+            "ACCINT",
+            "COUPONVALUE",
+            "COUPONPERCENT",
+            "FACEVALUE",
+          ],
+          data: [["2026-06-10", 22.4, 30.42, 6.1, 1000]],
+        },
+      }),
+    ).toEqual({
+      tradeDate: "2026-06-10",
+      accruedInterest: 22.4,
+      couponAmount: 30.42,
+      couponAnnualPercent: 6.1,
+      faceValue: 1000,
+    });
+  });
+});
+
 describe("normalizeBondDetails", () => {
   it("builds details with selected board and next offer date", () => {
     expect(
@@ -298,6 +364,8 @@ describe("normalizeBondDetails", () => {
           type: "put",
         },
       ],
+      couponSchedule: [],
+      amortizationSchedule: [],
     });
   });
 });
