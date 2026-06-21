@@ -9,6 +9,10 @@ import {
   getBondDetails,
   getHistoricalBondSnapshot,
 } from "../shared/api/moex";
+import {
+  loadCalculatorPreferences,
+  saveCalculatorPreferences,
+} from "../shared/persistence";
 import { CalculatorPage } from "./CalculatorPage";
 
 vi.mock("../shared/api/moex", async (importOriginal) => {
@@ -28,6 +32,7 @@ const getHistoricalBondSnapshotMock = vi.mocked(getHistoricalBondSnapshot);
 
 describe("CalculatorPage", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
     getBasicBondInfoMock.mockReset();
@@ -37,6 +42,41 @@ describe("CalculatorPage", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("restores global commission and tax settings after loading a bond", async () => {
+    saveCalculatorPreferences({
+      commissionPercent: "0.12",
+      taxPercent: "15",
+    });
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    expect(screen.getByLabelText("комиссия, %")).toHaveValue("0.12");
+    expect(screen.getByLabelText("налог, %")).toHaveValue("15");
+  });
+
+  it("persists commission and tax changes", async () => {
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    fireEvent.change(screen.getByLabelText("комиссия, %"), {
+      target: { value: "0.08" },
+    });
+    fireEvent.change(screen.getByLabelText("налог, %"), {
+      target: { value: "18" },
+    });
+
+    expect(loadCalculatorPreferences()).toEqual({
+      commissionPercent: "0.08",
+      taxPercent: "18",
+    });
   });
 
   it("loads selected bond data and uses the offer mode when an offer exists", async () => {

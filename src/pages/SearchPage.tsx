@@ -8,11 +8,12 @@ import {
   searchBasicBondInfo,
 } from "../shared/api/moex";
 import type { BasicBondInfo, LocalDate } from "../shared/api/moex";
+import { loadSearchQuery, saveSearchQuery } from "../shared/persistence";
 
 const BOND_SEARCH_DEBOUNCE_MS = 200;
 
 export function SearchPage() {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(loadSearchQuery);
   const normalizedQuery = query.trim();
   const debouncedQuery = useDebouncedValue(
     normalizedQuery,
@@ -34,6 +35,10 @@ export function SearchPage() {
   const sortedBonds = [...bonds].sort((left, right) =>
     left.shortname.localeCompare(right.shortname, "ru"),
   );
+
+  useEffect(() => {
+    saveSearchQuery(query);
+  }, [query]);
 
   return (
     <section className="space-y-5">

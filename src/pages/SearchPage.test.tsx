@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BasicBondInfo } from "../shared/api/moex";
 import { searchBasicBondInfo } from "../shared/api/moex";
+import { loadSearchQuery, saveSearchQuery } from "../shared/persistence";
 import { SearchPage } from "./SearchPage";
 
 vi.mock("../shared/api/moex", async (importOriginal) => {
@@ -20,7 +21,28 @@ const searchBasicBondInfoMock = vi.mocked(searchBasicBondInfo);
 
 describe("SearchPage", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     searchBasicBondInfoMock.mockReset();
+  });
+
+  it("restores the persisted search query and runs the search", async () => {
+    saveSearchQuery("26233");
+    searchBasicBondInfoMock.mockResolvedValue([]);
+
+    renderSearchPage();
+
+    expect(screen.getByRole("searchbox", { name: "Поиск" })).toHaveValue("26233");
+    expect(await screen.findByText("Ничего не найдено")).toBeInTheDocument();
+    expect(searchBasicBondInfoMock).toHaveBeenCalledWith("26233");
+  });
+
+  it("persists the search query as it changes", async () => {
+    const user = userEvent.setup();
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "26");
+
+    expect(loadSearchQuery()).toBe("26");
   });
 
   it("does not search until the query has at least 3 symbols", async () => {

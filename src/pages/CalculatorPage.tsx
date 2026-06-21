@@ -16,6 +16,11 @@ import type {
   LocalDate,
 } from "../shared/api/moex";
 import { calculateBondTrade } from "../shared/domain/bondTradeCalculator";
+import {
+  loadCalculatorPreferences,
+  saveCalculatorPreferences,
+} from "../shared/persistence";
+import type { CalculatorPreferences } from "../shared/persistence";
 
 type CalculatorMode = "maturity" | "offer" | "sale";
 
@@ -47,8 +52,6 @@ type CalculationView = {
   warnings: string[];
 };
 
-const DEFAULT_COMMISSION_PERCENT = "0.05";
-const DEFAULT_TAX_PERCENT = "13";
 const DEFAULT_SELL_PRICE = "100";
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
 
@@ -63,6 +66,13 @@ export function CalculatorPage() {
   const normalizedSecid = secid.trim().toUpperCase();
   const [mode, setMode] = useState<CalculatorMode>("maturity");
   const [form, setForm] = useState<CalculatorForm>(() => createDefaultForm());
+
+  useEffect(() => {
+    saveCalculatorPreferences({
+      commissionPercent: form.commissionPercent,
+      taxPercent: form.taxPercent,
+    });
+  }, [form.commissionPercent, form.taxPercent]);
 
   const { data, error, isError, isLoading } = useQuery({
     queryKey: ["bond-calculator", normalizedSecid],
@@ -110,7 +120,12 @@ export function CalculatorPage() {
     const initialMode = targetDates.offerDate ? "offer" : "maturity";
 
     setMode(initialMode);
-    setForm(createFormFromBond(data.basicInfo, targetDates, initialMode));
+    setForm((currentForm) =>
+      createFormFromBond(data.basicInfo, targetDates, initialMode, {
+        commissionPercent: currentForm.commissionPercent,
+        taxPercent: currentForm.taxPercent,
+      }),
+    );
   }, [data, targetDates]);
 
   useEffect(() => {
@@ -428,11 +443,13 @@ function ResultItem({ label, value, strong = false }: ResultRow) {
 }
 
 function createDefaultForm(): CalculatorForm {
+  const preferences = loadCalculatorPreferences();
+
   return {
     faceValue: "1000",
     couponPercent: "0",
-    commissionPercent: DEFAULT_COMMISSION_PERCENT,
-    taxPercent: DEFAULT_TAX_PERCENT,
+    commissionPercent: preferences.commissionPercent,
+    taxPercent: preferences.taxPercent,
     buyDate: getTodayLocalDate(),
     buyPrice: "100",
     sellDate: getTodayLocalDate(),
@@ -444,12 +461,13 @@ function createFormFromBond(
   bond: BasicBondInfo,
   targetDates: TargetDates,
   mode: CalculatorMode,
+  preferences: CalculatorPreferences,
 ): CalculatorForm {
   return {
     faceValue: formatInputNumber(bond.face_value),
     couponPercent: formatInputNumber(bond.coupon_percent ?? 0),
-    commissionPercent: DEFAULT_COMMISSION_PERCENT,
-    taxPercent: DEFAULT_TAX_PERCENT,
+    commissionPercent: preferences.commissionPercent,
+    taxPercent: preferences.taxPercent,
     buyDate: getTodayLocalDate(),
     buyPrice: formatInputNumber(getDisplayPrice(bond) ?? 100),
     sellDate: getModeDate(mode, targetDates, getTodayLocalDate()),
