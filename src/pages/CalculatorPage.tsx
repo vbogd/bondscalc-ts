@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, Loader2, Search } from "lucide-react";
+import { AlertCircle, ArrowLeft, CircleHelp, Loader2, Search } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -39,6 +39,7 @@ type ResultRow = {
   label: string;
   value: string;
   strong?: boolean;
+  tooltip?: string;
 };
 
 type ResultSection = {
@@ -54,6 +55,7 @@ type CalculationView = {
 
 const DEFAULT_SELL_PRICE = "100";
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
+const CURRENT_YIELD_TOOLTIP = "Купон / цена покупки − налог";
 
 const modeLabels: Record<CalculatorMode, string> = {
   maturity: "Погашение",
@@ -333,9 +335,6 @@ export function CalculatorPage() {
           <section className="overflow-hidden rounded-lg border border-neutral-300 bg-white">
             <div className="border-b border-neutral-200 px-4 py-4">
               <h2 className="text-xl font-semibold text-neutral-950">Результаты</h2>
-              <p className="mt-1 text-sm text-neutral-500">
-                НКД продажи считается по ближайшему купону и дневному накоплению.
-              </p>
             </div>
             <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 px-4 py-5 text-xl">
               {calculationView.summaryRows.map((row) => (
@@ -431,10 +430,31 @@ function InputField({
   );
 }
 
-function ResultItem({ label, value, strong = false }: ResultRow) {
+function ResultItem({ label, value, strong = false, tooltip }: ResultRow) {
   return (
     <>
-      <dt className="text-neutral-700">{label}</dt>
+      <dt className="flex items-center gap-1.5 text-neutral-700">
+        {label}
+        {tooltip ? (
+          <span className="group relative inline-flex">
+            <button
+              aria-describedby="current-yield-tooltip"
+              aria-label="Формула текущей доходности"
+              className="rounded-full text-neutral-400 outline-none transition-colors hover:text-neutral-700 focus-visible:text-neutral-700 focus-visible:ring-2 focus-visible:ring-blue-500"
+              type="button"
+            >
+              <CircleHelp className="size-4" aria-hidden="true" />
+            </button>
+            <span
+              className="invisible absolute bottom-full left-0 z-10 mb-2 w-64 rounded-md bg-neutral-900 px-3 py-2 text-sm leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+              id="current-yield-tooltip"
+              role="tooltip"
+            >
+              {tooltip}
+            </span>
+          </span>
+        ) : null}
+      </dt>
       <dd className={strong ? "font-semibold text-neutral-950" : "text-neutral-950"}>
         {value}
       </dd>
@@ -619,13 +639,24 @@ function createCalculationView({
   return {
     summaryRows: [
       {
+        label: "доходность, год",
+        value: formatPercent(result.annualizedReturnPercent),
+      },
+      {
+        label: "тек. доходность",
+        tooltip: CURRENT_YIELD_TOOLTIP,
+        value: formatPercent(
+          calculateCurrentYieldAfterTax({
+            couponPercent,
+            pricePercent: buyPrice,
+            taxPercent,
+          }),
+        ),
+      },
+      {
         label: "прибыль после налога",
         value: formatMoney(result.profitAfterTax, currency),
         strong: true,
-      },
-      {
-        label: "доходность, год",
-        value: formatPercent(result.annualizedReturnPercent),
       },
       { label: "срок, дней", value: formatNumber(result.holdingDays) },
     ],
@@ -650,7 +681,7 @@ function createCalculationView({
         title: "Продажа",
         rows: [
           {
-            label: "чистая цена продажи",
+            label: "чистая цена",
             value: formatMoney(result.exitCleanAmount, currency),
           },
           {
@@ -939,8 +970,13 @@ function formatForecastCouponCount(count: number): string {
 function createEmptyCalculationView(warnings: string[] = []): CalculationView {
   return {
     summaryRows: [
-      { label: "прибыль после налога", value: "—", strong: true },
       { label: "доходность, год", value: "—" },
+      {
+        label: "тек. доходность",
+        value: "—",
+        tooltip: CURRENT_YIELD_TOOLTIP,
+      },
+      { label: "прибыль после налога", value: "—", strong: true },
       { label: "срок, дней", value: "—" },
     ],
     detailSections: [
@@ -956,7 +992,7 @@ function createEmptyCalculationView(warnings: string[] = []): CalculationView {
       {
         title: "Продажа",
         rows: [
-          { label: "чистая цена продажи", value: "—" },
+          { label: "чистая цена", value: "—" },
           { label: "НКД продажи", value: "—" },
           { label: "комиссия продажи", value: "—" },
           { label: "получено купонов", value: "—" },
@@ -975,6 +1011,22 @@ function createEmptyCalculationView(warnings: string[] = []): CalculationView {
     ],
     warnings,
   };
+}
+
+function calculateCurrentYieldAfterTax({
+  couponPercent,
+  pricePercent,
+  taxPercent,
+}: {
+  couponPercent: number;
+  pricePercent: number;
+  taxPercent: number;
+}): number | null {
+  if (pricePercent <= 0) {
+    return null;
+  }
+
+  return (couponPercent * (1 - taxPercent / 100) * 100) / pricePercent;
 }
 
 function parseDecimal(value: string): number | null {

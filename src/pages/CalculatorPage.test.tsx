@@ -96,6 +96,25 @@ describe("CalculatorPage", () => {
     expect(screen.getByLabelText("цена продажи, %")).toHaveValue("99.5");
     expect(screen.getByText("158,52 ₽")).toBeInTheDocument();
     expect(screen.getByText("17,37 %")).toBeInTheDocument();
+    expect(screen.getByText("тек. доходность")).toBeInTheDocument();
+    expect(screen.getByText("9,67 %")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Формула текущей доходности" }),
+    ).toHaveAccessibleDescription("Купон / цена покупки − налог");
+    expect(
+      Array.from(
+        screen
+          .getByRole("heading", { name: "Результаты" })
+          .closest("section")!
+          .querySelectorAll("dt"),
+        (element) => element.firstChild?.textContent,
+      ),
+    ).toEqual([
+      "доходность, год",
+      "тек. доходность",
+      "прибыль после налога",
+      "срок, дней",
+    ]);
     expect(screen.getByText("НКД покупки")).toBeInTheDocument();
     expect(screen.getByText("получено купонов")).toBeInTheDocument();
   });
