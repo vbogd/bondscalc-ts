@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, CircleHelp, Loader2, Search } from "lucide-react";
+import { AlertCircle, ArrowLeft, CircleHelp, ExternalLink, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getBasicBondInfo,
@@ -74,6 +74,8 @@ export function CalculatorPage() {
   const normalizedSecid = secid.trim().toUpperCase();
   const [mode, setMode] = useState<CalculatorMode>("maturity");
   const [form, setForm] = useState<CalculatorForm>(() => createDefaultForm());
+  const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
+  const shareMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     saveCalculatorPreferences({
@@ -81,6 +83,27 @@ export function CalculatorPage() {
       taxPercent: form.taxPercent,
     });
   }, [form.commissionPercent, form.taxPercent]);
+
+  useEffect(() => {
+    if (!isShareMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        event.target instanceof Node &&
+        !shareMenuRef.current?.contains(event.target)
+      ) {
+        setIsShareMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isShareMenuOpen]);
 
   const { data, error, isError, isLoading } = useQuery({
     queryKey: ["bond-calculator", normalizedSecid],
@@ -184,6 +207,19 @@ export function CalculatorPage() {
 
   const title = data?.details.shortName ?? data?.basicInfo.shortname ?? normalizedSecid;
   const subtitle = data?.details.isin ?? data?.basicInfo.isin ?? normalizedSecid;
+  const dohodBondIsin = data?.details.isin ?? data?.basicInfo.isin ?? null;
+  const dohodBondUrl = dohodBondIsin
+    ? `https://analytics.dohod.ru/bond/${encodeURIComponent(dohodBondIsin)}`
+    : null;
+  const externalLinks = dohodBondUrl
+    ? [
+        {
+          href: dohodBondUrl,
+          label: "Доходъ",
+          icon: <DohodLogoIcon className="size-5" aria-hidden="true" />,
+        },
+      ]
+    : [];
   const hasOffer = Boolean(targetDates?.offerDate);
 
   function handleModeChange(nextMode: CalculatorMode) {
@@ -229,13 +265,41 @@ export function CalculatorPage() {
           </h1>
           <p className="truncate text-lg text-neutral-500">{subtitle}</p>
         </div>
-        <Link
-          className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-neutral-300 bg-white text-neutral-700 shadow-sm"
-          to="/"
-          aria-label="Поиск облигаций"
-        >
-          <Search className="size-5" aria-hidden="true" />
-        </Link>
+        {externalLinks.length > 0 ? (
+          <div className="relative shrink-0" ref={shareMenuRef}>
+            <button
+              className="inline-flex size-10 cursor-pointer items-center justify-center rounded-lg border border-neutral-300 bg-white text-neutral-700 shadow-sm"
+              type="button"
+              aria-label="Внешние ссылки"
+              aria-haspopup="menu"
+              aria-expanded={isShareMenuOpen}
+              onClick={() => setIsShareMenuOpen((isOpen) => !isOpen)}
+            >
+              <ExternalLink className="size-5" aria-hidden="true" />
+            </button>
+            {isShareMenuOpen ? (
+              <div
+                className="absolute right-0 top-12 z-10 w-44 rounded-lg border border-neutral-200 bg-white p-1 shadow-lg"
+                role="menu"
+              >
+                {externalLinks.map((externalLink) => (
+                  <a
+                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-100"
+                    href={externalLink.href}
+                    key={externalLink.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    role="menuitem"
+                    onClick={() => setIsShareMenuOpen(false)}
+                  >
+                    {externalLink.icon}
+                    <span>{externalLink.label}</span>
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       {isLoading ? (
@@ -474,6 +538,31 @@ function ResultItem({
         {value}
       </dd>
     </>
+  );
+}
+
+function DohodLogoIcon({
+  className,
+  ...props
+}: {
+  className?: string;
+  "aria-hidden"?: "true";
+}) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 39.0757 39.0757"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M19.5378 0C30.3282 0 39.0757 8.74749 39.0757 19.5378C39.0757 30.3282 30.3282 39.0757 19.5378 39.0757C8.74749 39.0757 0 30.3282 0 19.5378C0 8.74749 8.74749 0 19.5378 0ZM11.4133 28.2184C13.57 28.2184 15.3449 26.5171 15.3449 24.3905C15.3449 22.2639 13.57 20.5325 11.4133 20.5325C9.25653 20.5325 7.46484 22.2773 7.46484 24.3905C7.46484 26.5037 9.23979 28.2184 11.4133 28.2184ZM11.4133 22.5251C12.4246 22.5251 13.2284 23.3456 13.2284 24.3871C13.2284 25.4287 12.4246 26.219 11.4133 26.219C10.4019 26.219 9.58138 25.4454 9.58138 24.3871C9.58138 23.3289 10.4019 22.5251 11.4133 22.5251ZM14.9062 29.0522C14.9062 28.9216 14.7756 28.7877 14.5847 28.7877H8.15807C7.96718 28.7877 7.84997 28.9183 7.84997 29.0522V30.6664C7.84997 30.7837 7.96718 30.9143 8.15807 30.9143H14.5847C14.7756 30.9143 14.9062 30.7837 14.9062 30.6664V29.0522ZM18.7542 20.2512L17.5519 18.57C17.5017 18.4997 17.495 18.4126 17.5352 18.3356C17.5754 18.2585 17.649 18.215 17.7361 18.215H18.6537C18.8044 18.215 18.9317 18.282 19.0188 18.4025L19.5445 19.1393L20.0703 18.4025C20.1574 18.282 20.288 18.215 20.4354 18.215H21.353C21.4401 18.215 21.5137 18.2585 21.5539 18.3356C21.5941 18.4126 21.5874 18.4997 21.5372 18.57L20.3349 20.2512L21.5372 21.9324C21.5874 22.0027 21.5941 22.0898 21.5539 22.1668C21.5137 22.2438 21.4401 22.2873 21.353 22.2873H20.4354C20.2847 22.2873 20.1574 22.2204 20.0703 22.0998L19.5445 21.363L19.0188 22.0998C18.9317 22.2204 18.8011 22.2873 18.6537 22.2873H17.7361C17.649 22.2873 17.5754 22.2438 17.5352 22.1668C17.495 22.0898 17.5017 22.0027 17.5519 21.9324L18.7542 20.2512ZM31.3999 30.566V29.0857C31.3999 28.9652 31.2659 28.8312 31.0717 28.8312H30.355V20.9143C30.355 20.7803 30.2478 20.6463 30.0569 20.6463H26.6912C24.5311 20.6463 23.0543 22.0027 23.0543 24.2063V28.2184C23.0543 28.7374 22.8131 28.8312 22.6088 28.8312H22.3108C22.1333 28.8312 22.0127 28.9652 22.0127 29.0857V30.566C22.0127 30.7602 22.1701 30.9176 22.3644 30.9176H31.0482C31.2425 30.9176 31.3999 30.7602 31.3999 30.566ZM25.1407 28.2184V24.2063C25.1407 23.2686 25.6765 22.7328 26.5405 22.7328H28.2686V28.8312H24.99C25.0938 28.5633 25.1373 28.3992 25.1373 28.2184H25.1407ZM32.1936 19.5177H34.0154C34.1058 19.5177 34.1828 19.5646 34.2264 19.645C34.2699 19.7254 34.2632 19.8158 34.213 19.8895L32.495 22.4682C32.4179 22.582 32.3007 22.6457 32.1634 22.6457H31.6611C31.5774 22.6457 31.5037 22.6122 31.4501 22.5486C31.3965 22.4849 31.3731 22.4079 31.3865 22.3242L31.7984 19.8526C31.8319 19.6584 31.996 19.5211 32.1902 19.5211L32.1936 19.5177ZM26.8687 14.4575C29.0255 14.4575 30.8004 12.7562 30.8004 10.6296C30.8004 8.50301 29.0255 6.7716 26.8687 6.7716C24.712 6.7716 22.9203 8.51641 22.9203 10.6296C22.9203 12.7428 24.6952 14.4575 26.8687 14.4575ZM26.8721 8.76423C27.8835 8.76423 28.6872 9.58473 28.6872 10.6263C28.6872 11.6678 27.8835 12.4581 26.8721 12.4581C25.8607 12.4581 25.0402 11.6845 25.0402 10.6263C25.0402 9.56798 25.8607 8.76423 26.8721 8.76423ZM30.3617 15.2914C30.3617 15.1607 30.2311 15.0268 30.0402 15.0268H23.6135C23.4226 15.0268 23.3054 15.1574 23.3054 15.2914V16.9056C23.3054 17.0228 23.4226 17.1534 23.6135 17.1534H30.0402C30.2311 17.1534 30.3617 17.0228 30.3617 16.9056V15.2914ZM15.9411 16.8051V15.3248C15.9411 15.2043 15.8071 15.0703 15.6129 15.0703H14.8962V7.15338C14.8962 7.01942 14.789 6.88547 14.5981 6.88547H11.2324C9.07234 6.88547 7.59545 8.2418 7.59545 10.4454V14.4575C7.59545 14.9766 7.35432 15.0703 7.14668 15.0703H6.84863C6.67113 15.0703 6.55057 15.2043 6.55057 15.3248V16.8051C6.55057 16.9993 6.70797 17.1567 6.90221 17.1567H15.5861C15.7803 17.1567 15.9377 16.9993 15.9377 16.8051H15.9411ZM9.68185 14.4575V10.4454C9.68185 9.5077 10.2177 8.97187 11.0817 8.97187H12.8098V15.0703H9.53115C9.63496 14.8024 9.6785 14.6383 9.6785 14.4575H9.68185Z"
+        fill="#AB0033"
+      />
+    </svg>
   );
 }
 

@@ -80,6 +80,7 @@ describe("CalculatorPage", () => {
   });
 
   it("loads selected bond data and uses the offer mode when an offer exists", async () => {
+    const user = userEvent.setup();
     getBasicBondInfoMock.mockResolvedValue(createBond());
     getBondDetailsMock.mockResolvedValue(createDetails());
 
@@ -92,6 +93,28 @@ describe("CalculatorPage", () => {
     expect(screen.queryByText("SECID")).not.toBeInTheDocument();
     expect(screen.queryByText("RU000A_TEST")).not.toBeInTheDocument();
     expect(screen.queryByText("Board")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Поиск облигаций" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Назад к поиску" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "Доходъ" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Внешние ссылки" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Доходъ" }),
+    ).toHaveAttribute("href", "https://analytics.dohod.ru/bond/RU000A000000");
+    expect(
+      screen.getByRole("menuitem", { name: "Доходъ" }),
+    ).toHaveAttribute("target", "_blank");
+    expect(
+      screen.getByRole("menuitem", { name: "Доходъ" }),
+    ).toHaveAttribute("rel", "noreferrer");
+    await user.click(screen.getByRole("heading", { name: "Тест 001" }));
+    expect(
+      screen.queryByRole("menuitem", { name: "Доходъ" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Оферта" })).toHaveClass("bg-blue-600");
     expect(screen.getByLabelText("цена продажи, %")).toHaveValue("99.5");
     expect(screen.getByText("158,52 ₽")).toBeInTheDocument();
@@ -199,6 +222,18 @@ describe("CalculatorPage", () => {
 
     expect(await screen.findByText("Не удалось открыть калькулятор")).toBeInTheDocument();
     expect(screen.getByText("MOEX request failed")).toBeInTheDocument();
+  });
+
+  it("does not show the dohod.ru link when an ISIN is unavailable", async () => {
+    getBasicBondInfoMock.mockResolvedValue(createBond({ isin: "" }));
+    getBondDetailsMock.mockResolvedValue(createDetails({ isin: null }));
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+
+    expect(screen.queryByRole("button", { name: "Внешние ссылки" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Доходъ" })).not.toBeInTheDocument();
   });
 
   it("loads accrued interest for a historical buy date", async () => {
