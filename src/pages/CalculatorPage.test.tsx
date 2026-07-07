@@ -102,6 +102,20 @@ describe("CalculatorPage", () => {
       screen.getByRole("button", { name: "Формула текущей доходности" }),
     ).toHaveAccessibleDescription("Купон / цена покупки − налог");
     expect(
+      screen.getByRole("button", {
+        name: "Описание показателя «доходность XIRR, годовая»",
+      }),
+    ).toHaveAccessibleDescription(
+      "Годовая доходность после налога с учетом дат купонов, амортизаций и погашения.",
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "Описание показателя «совокупная прибыль, годовая»",
+      }),
+    ).toHaveAccessibleDescription(
+      "Прибыль после налога относительно затрат, линейно пересчитанная на год.",
+    );
+    expect(
       Array.from(
         screen
           .getByRole("heading", { name: "Результаты" })
@@ -110,7 +124,8 @@ describe("CalculatorPage", () => {
         (element) => element.firstChild?.textContent,
       ),
     ).toEqual([
-      "доходность, год",
+      "доходность XIRR, годовая",
+      "совокупная прибыль, годовая",
       "тек. доходность",
       "прибыль после налога",
       "срок, дней",
@@ -232,7 +247,7 @@ describe("CalculatorPage", () => {
 
     expect(
       await screen.findByText(
-        "1 будущий купон рассчитан прогнозно по ставке 10 %.",
+        "Будущие купоны не определены. XIRR рассчитана при сохранении ставки 10 % годовых. Фактическая доходность может отличаться.",
       ),
     ).toBeInTheDocument();
   });

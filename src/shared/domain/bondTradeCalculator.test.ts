@@ -102,6 +102,25 @@ describe("calculateBondTrade", () => {
     expect(result.profitAfterTax).toBe(0);
   });
 
+  it("calculates XIRR from dated coupon and principal cash flows", () => {
+    const result = calculateBondTrade(
+      createInput({
+        buyDate: "2026-01-01",
+        exitDate: "2027-01-01",
+        coupons: [
+          { date: "2026-07-02", amount: 50 },
+          { date: "2027-01-01", amount: 50 },
+        ],
+        commissionPercent: 0,
+        exitCommissionPercent: 0,
+        taxPercent: 0,
+      }),
+    );
+
+    expect(result.annualizedReturnPercent).toBe(10);
+    expect(result.annualizedXirrPercent).toBeCloseTo(10.25, 2);
+  });
+
   it("does not annualize a same-day or invalid holding period", () => {
     const result = calculateBondTrade(
       createInput({
@@ -112,6 +131,7 @@ describe("calculateBondTrade", () => {
 
     expect(result.holdingDays).toBe(0);
     expect(result.annualizedReturnPercent).toBeNull();
+    expect(result.annualizedXirrPercent).toBeNull();
     expect(result.warnings).toContain(
       "Доходность годовых считается только при сроке больше 0 дней.",
     );

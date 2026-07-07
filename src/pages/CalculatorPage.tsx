@@ -40,6 +40,8 @@ type ResultRow = {
   value: string;
   strong?: boolean;
   tooltip?: string;
+  tooltipAlign?: "left" | "right";
+  tooltipLabel?: string;
 };
 
 type ResultSection = {
@@ -56,6 +58,10 @@ type CalculationView = {
 const DEFAULT_SELL_PRICE = "100";
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
 const CURRENT_YIELD_TOOLTIP = "Купон / цена покупки − налог";
+const XIRR_TOOLTIP =
+  "Годовая доходность после налога с учетом дат купонов, амортизаций и погашения.";
+const ANNUALIZED_PROFIT_TOOLTIP =
+  "Прибыль после налога относительно затрат, линейно пересчитанная на год.";
 
 const modeLabels: Record<CalculatorMode, string> = {
   maturity: "Погашение",
@@ -430,7 +436,16 @@ function InputField({
   );
 }
 
-function ResultItem({ label, value, strong = false, tooltip }: ResultRow) {
+function ResultItem({
+  label,
+  value,
+  strong = false,
+  tooltip,
+  tooltipAlign = "right",
+  tooltipLabel = `Описание показателя «${label}»`,
+}: ResultRow) {
+  const tooltipId = `result-tooltip-${label.replace(/[^a-zа-яё0-9]+/gi, "-")}`;
+
   return (
     <>
       <dt className="flex items-center gap-1.5 text-neutral-700">
@@ -438,16 +453,16 @@ function ResultItem({ label, value, strong = false, tooltip }: ResultRow) {
         {tooltip ? (
           <span className="group relative inline-flex">
             <button
-              aria-describedby="current-yield-tooltip"
-              aria-label="Формула текущей доходности"
+              aria-describedby={tooltipId}
+              aria-label={tooltipLabel}
               className="rounded-full text-neutral-400 outline-none transition-colors hover:text-neutral-700 focus-visible:text-neutral-700 focus-visible:ring-2 focus-visible:ring-blue-500"
               type="button"
             >
               <CircleHelp className="size-4" aria-hidden="true" />
             </button>
             <span
-              className="invisible absolute bottom-full left-0 z-10 mb-2 w-64 rounded-md bg-neutral-900 px-3 py-2 text-sm leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
-              id="current-yield-tooltip"
+              className={`invisible absolute bottom-full z-10 mb-2 w-64 rounded-md bg-neutral-900 px-3 py-2 text-sm leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 ${tooltipAlign === "left" ? "left-0" : "right-0"}`}
+              id={tooltipId}
               role="tooltip"
             >
               {tooltip}
@@ -639,12 +654,21 @@ function createCalculationView({
   return {
     summaryRows: [
       {
-        label: "доходность, год",
+        label: "доходность XIRR, годовая",
+        value: formatPercent(result.annualizedXirrPercent),
+        tooltip: XIRR_TOOLTIP,
+        strong: true,
+      },
+      {
+        label: "совокупная прибыль, годовая",
         value: formatPercent(result.annualizedReturnPercent),
+        tooltip: ANNUALIZED_PROFIT_TOOLTIP,
       },
       {
         label: "тек. доходность",
         tooltip: CURRENT_YIELD_TOOLTIP,
+        tooltipAlign: "left",
+        tooltipLabel: "Формула текущей доходности",
         value: formatPercent(
           calculateCurrentYieldAfterTax({
             couponPercent,
@@ -932,10 +956,8 @@ function createCashFlowWarnings({
   const warnings: string[] = [];
 
   if (forecastCouponCount > 0) {
-    const forecastText = formatForecastCouponCount(forecastCouponCount);
-
     warnings.push(
-      `${forecastCouponCount} ${forecastText} прогнозно по ставке ${formatInputNumber(annualPercent)} %.`,
+      `Будущие купоны не определены. XIRR рассчитана при сохранении ставки ${formatInputNumber(annualPercent)} % годовых. Фактическая доходность может отличаться.`,
     );
   }
 
@@ -952,29 +974,26 @@ function createCashFlowWarnings({
   return warnings;
 }
 
-function formatForecastCouponCount(count: number): string {
-  const modulo10 = count % 10;
-  const modulo100 = count % 100;
-
-  if (modulo10 === 1 && modulo100 !== 11) {
-    return "будущий купон рассчитан";
-  }
-
-  if (modulo10 >= 2 && modulo10 <= 4 && (modulo100 < 12 || modulo100 > 14)) {
-    return "будущих купона рассчитаны";
-  }
-
-  return "будущих купонов рассчитаны";
-}
-
 function createEmptyCalculationView(warnings: string[] = []): CalculationView {
   return {
     summaryRows: [
-      { label: "доходность, год", value: "—" },
+      {
+        label: "доходность XIRR, годовая",
+        value: "—",
+        tooltip: XIRR_TOOLTIP,
+        strong: true,
+      },
+      {
+        label: "совокупная прибыль, годовая",
+        value: "—",
+        tooltip: ANNUALIZED_PROFIT_TOOLTIP,
+      },
       {
         label: "тек. доходность",
         value: "—",
         tooltip: CURRENT_YIELD_TOOLTIP,
+        tooltipAlign: "left",
+        tooltipLabel: "Формула текущей доходности",
       },
       { label: "прибыль после налога", value: "—", strong: true },
       { label: "срок, дней", value: "—" },

@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { xirr } from "@webcarrot/xirr";
 import type { LocalDate } from "../api/moex";
 
 export type BondCashFlow = {
@@ -44,6 +45,7 @@ export type BondTradeResult = {
   tax: number;
   profitAfterTax: number;
   dealReturnPercent: number | null;
+  annualizedXirrPercent: number | null;
   annualizedReturnPercent: number | null;
   couponEffect: number;
   nominalAtExit: number;
@@ -98,6 +100,23 @@ export function calculateBondTrade(input: BondTradeInput): BondTradeResult {
     dealReturnPercent && effectiveHoldingDays > 0
       ? dealReturnPercent.mul(365).div(effectiveHoldingDays)
       : null;
+  const annualizedXirrPercent = calculateAnnualizedXirrPercent({
+    buyDate: input.buyDate,
+    exitDate: input.exitDate,
+    totalPaid,
+    exitAmount: exitCleanAmount
+      .plus(couponAccrual.exitAccruedInterest)
+      .minus(exitCommission),
+    receiptFactor: totalReceived.gt(0)
+      ? totalReceived.minus(tax).div(totalReceived)
+      : new Decimal(1),
+    coupons: getCashFlowsInsidePeriod(
+      input.coupons ?? [],
+      input.buyDate,
+      input.exitDate,
+    ),
+    amortizations,
+  });
 
   return {
     holdingDays: effectiveHoldingDays,
@@ -116,6 +135,7 @@ export function calculateBondTrade(input: BondTradeInput): BondTradeResult {
     tax: toNumber(tax),
     profitAfterTax: toNumber(profitAfterTax),
     dealReturnPercent: dealReturnPercent ? toNumber(dealReturnPercent) : null,
+    annualizedXirrPercent,
     annualizedReturnPercent: annualizedReturnPercent
       ? toNumber(annualizedReturnPercent)
       : null,
@@ -130,6 +150,55 @@ export function calculateBondTrade(input: BondTradeInput): BondTradeResult {
       input,
     }),
   };
+}
+
+function calculateAnnualizedXirrPercent({
+  buyDate,
+  exitDate,
+  totalPaid,
+  exitAmount,
+  receiptFactor,
+  coupons,
+  amortizations,
+}: {
+  buyDate: LocalDate;
+  exitDate: LocalDate;
+  totalPaid: Decimal;
+  exitAmount: Decimal;
+  receiptFactor: Decimal;
+  coupons: BondCashFlow[];
+  amortizations: BondCashFlow[];
+}): number | null {
+  if (getDaysBetween(buyDate, exitDate) === null || buyDate >= exitDate) {
+    return null;
+  }
+
+  const cashFlows = [
+    { date: toUtcDate(buyDate), amount: totalPaid.negated().toNumber() },
+    ...coupons.map(({ date, amount }) => ({
+      date: toUtcDate(date),
+      amount: receiptFactor.mul(amount).toNumber(),
+    })),
+    ...amortizations.map(({ date, amount }) => ({
+      date: toUtcDate(date),
+      amount: receiptFactor.mul(amount).toNumber(),
+    })),
+    {
+      date: toUtcDate(exitDate),
+      amount: receiptFactor.mul(exitAmount).toNumber(),
+    },
+  ].filter(({ amount }) => amount !== 0);
+
+  try {
+    const rate = xirr(cashFlows);
+    return Number.isFinite(rate) ? toNumber(new Decimal(rate).mul(100)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function toUtcDate(date: LocalDate): Date {
+  return new Date(`${date}T00:00:00Z`);
 }
 
 export function getDaysBetween(startDate: LocalDate, endDate: LocalDate): number | null {
