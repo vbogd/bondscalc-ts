@@ -7,6 +7,9 @@
     "allowImportingTsExtensions": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,

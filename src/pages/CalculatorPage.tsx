@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, ArrowLeft, CircleHelp, ExternalLink, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getBasicBondInfo,
@@ -21,6 +21,21 @@ import {
   saveCalculatorPreferences,
 } from "../shared/persistence";
 import type { CalculatorPreferences } from "../shared/persistence";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type CalculatorMode = "maturity" | "offer" | "sale";
 
@@ -69,13 +84,15 @@ const modeLabels: Record<CalculatorMode, string> = {
   sale: "Продажа",
 };
 
+function isCalculatorMode(value: string): value is CalculatorMode {
+  return value === "maturity" || value === "offer" || value === "sale";
+}
+
 export function CalculatorPage() {
   const { secid = "SU26233RMFS5" } = useParams();
   const normalizedSecid = secid.trim().toUpperCase();
   const [mode, setMode] = useState<CalculatorMode>("maturity");
   const [form, setForm] = useState<CalculatorForm>(() => createDefaultForm());
-  const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
-  const shareMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     saveCalculatorPreferences({
@@ -83,27 +100,6 @@ export function CalculatorPage() {
       taxPercent: form.taxPercent,
     });
   }, [form.commissionPercent, form.taxPercent]);
-
-  useEffect(() => {
-    if (!isShareMenuOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: PointerEvent) {
-      if (
-        event.target instanceof Node &&
-        !shareMenuRef.current?.contains(event.target)
-      ) {
-        setIsShareMenuOpen(false);
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [isShareMenuOpen]);
 
   const { data, error, isError, isLoading } = useQuery({
     queryKey: ["bond-calculator", normalizedSecid],
@@ -253,52 +249,49 @@ export function CalculatorPage() {
     <section className="space-y-5">
       <header className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <Link
-            className="mb-2 inline-flex size-10 items-center justify-center rounded-lg border border-neutral-300 bg-white text-neutral-700 shadow-sm"
-            to="/"
-            aria-label="Назад к поиску"
+          <Button
+            asChild
+            variant="outline"
+            size="icon"
+            className="mb-2 rounded-lg bg-white text-neutral-700 shadow-sm"
           >
-            <ArrowLeft className="size-5" aria-hidden="true" />
-          </Link>
+            <Link to="/" aria-label="Назад к поиску">
+              <ArrowLeft className="size-5" aria-hidden="true" />
+            </Link>
+          </Button>
           <h1 className="truncate text-3xl font-semibold tracking-normal text-neutral-950">
             {title}
           </h1>
           <p className="truncate text-lg text-neutral-500">{subtitle}</p>
         </div>
         {externalLinks.length > 0 ? (
-          <div className="relative shrink-0" ref={shareMenuRef}>
-            <button
-              className="inline-flex size-10 cursor-pointer items-center justify-center rounded-lg border border-neutral-300 bg-white text-neutral-700 shadow-sm"
-              type="button"
-              aria-label="Внешние ссылки"
-              aria-haspopup="menu"
-              aria-expanded={isShareMenuOpen}
-              onClick={() => setIsShareMenuOpen((isOpen) => !isOpen)}
-            >
-              <ExternalLink className="size-5" aria-hidden="true" />
-            </button>
-            {isShareMenuOpen ? (
-              <div
-                className="absolute right-0 top-12 z-10 w-44 rounded-lg border border-neutral-200 bg-white p-1 shadow-lg"
-                role="menu"
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 rounded-lg bg-white text-neutral-700 shadow-sm"
+                aria-label="Внешние ссылки"
               >
-                {externalLinks.map((externalLink) => (
+                <ExternalLink className="size-5" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              {externalLinks.map((externalLink) => (
+                <DropdownMenuItem asChild key={externalLink.href}>
                   <a
-                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-100"
+                    className="cursor-pointer gap-3 text-sm font-medium text-neutral-800"
                     href={externalLink.href}
-                    key={externalLink.href}
                     target="_blank"
                     rel="noreferrer"
-                    role="menuitem"
-                    onClick={() => setIsShareMenuOpen(false)}
                   >
                     {externalLink.icon}
                     <span>{externalLink.label}</span>
                   </a>
-                ))}
-              </div>
-            ) : null}
-          </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
       </header>
 
@@ -363,30 +356,43 @@ export function CalculatorPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 rounded-lg border border-neutral-300 bg-white p-1 text-sm font-semibold">
+          <ToggleGroup
+            type="multiple"
+            value={[mode]}
+            onValueChange={(nextModes) => {
+              const nextMode = nextModes.find(
+                (candidate): candidate is CalculatorMode =>
+                  candidate !== mode && isCalculatorMode(candidate),
+              );
+
+              if (nextMode) {
+                handleModeChange(nextMode);
+              }
+            }}
+            className="grid w-full grid-cols-3 rounded-lg border border-neutral-300 bg-white p-1 text-sm font-semibold"
+          >
             {(Object.keys(modeLabels) as CalculatorMode[]).map((modeKey) => {
               const isActive = mode === modeKey;
               const isDisabled = modeKey === "offer" && !hasOffer;
 
               return (
-                <button
+                <ToggleGroupItem
                   className={
                     isActive
-                      ? "rounded-md bg-blue-600 px-2 py-3 text-white"
+                      ? "rounded-md bg-blue-600 px-2 py-3 text-white hover:bg-blue-600 hover:text-white data-[state=on]:bg-blue-600 data-[state=on]:text-white"
                       : isDisabled
                         ? "rounded-md px-2 py-3 text-neutral-300"
                         : "rounded-md px-2 py-3 text-neutral-600"
                   }
                   disabled={isDisabled}
                   key={modeKey}
-                  onClick={() => handleModeChange(modeKey)}
-                  type="button"
+                  value={modeKey}
                 >
                   {modeLabels[modeKey]}
-                </button>
+                </ToggleGroupItem>
               );
             })}
-          </div>
+          </ToggleGroup>
 
           <div className="grid grid-cols-2 gap-2">
             <InputField
@@ -489,8 +495,8 @@ function InputField({
       <span className="block text-sm font-semibold uppercase text-neutral-500">
         {label}
       </span>
-      <input
-        className="mt-1 w-full border-0 bg-transparent text-2xl text-neutral-950 outline-none"
+      <Input
+        className="mt-1 h-auto w-full border-0 bg-transparent px-0 py-0 text-2xl text-neutral-950 shadow-none outline-none focus-visible:border-0 focus-visible:ring-0"
         inputMode={type === "date" ? undefined : "decimal"}
         onChange={(event) => onChange(event.target.value)}
         type={type}
@@ -515,23 +521,30 @@ function ResultItem({
       <dt className="flex items-center gap-1.5 text-neutral-700">
         {label}
         {tooltip ? (
-          <span className="group relative inline-flex">
-            <button
-              aria-describedby={tooltipId}
-              aria-label={tooltipLabel}
-              className="rounded-full text-neutral-400 outline-none transition-colors hover:text-neutral-700 focus-visible:text-neutral-700 focus-visible:ring-2 focus-visible:ring-blue-500"
-              type="button"
-            >
-              <CircleHelp className="size-4" aria-hidden="true" />
-            </button>
-            <span
-              className={`invisible absolute bottom-full z-10 mb-2 w-64 rounded-md bg-neutral-900 px-3 py-2 text-sm leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 ${tooltipAlign === "left" ? "left-0" : "right-0"}`}
-              id={tooltipId}
-              role="tooltip"
-            >
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  aria-describedby={tooltipId}
+                  aria-label={tooltipLabel}
+                  className="rounded-full text-neutral-400 outline-none transition-colors hover:text-neutral-700 focus-visible:text-neutral-700 focus-visible:ring-2 focus-visible:ring-blue-500"
+                  type="button"
+                >
+                  <CircleHelp className="size-4" aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent
+                align={tooltipAlign === "left" ? "start" : "end"}
+                className="data-[state=closed]:hidden"
+                forceMount
+              >
+                {tooltip}
+              </TooltipContent>
+            </Tooltip>
+            <span id={tooltipId} className="sr-only">
               {tooltip}
             </span>
-          </span>
+          </TooltipProvider>
         ) : null}
       </dt>
       <dd className={strong ? "font-semibold text-neutral-950" : "text-neutral-950"}>

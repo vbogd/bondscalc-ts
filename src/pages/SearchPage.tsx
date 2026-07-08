@@ -9,6 +9,8 @@ import {
 } from "../shared/api/moex";
 import type { BasicBondInfo, LocalDate } from "../shared/api/moex";
 import { loadSearchQuery, saveSearchQuery } from "../shared/persistence";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 const BOND_SEARCH_DEBOUNCE_MS = 200;
 
@@ -52,8 +54,8 @@ export function SearchPage() {
       <label className="flex h-14 items-center gap-3 rounded-lg border border-neutral-300 bg-white px-4 shadow-sm focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
         <Search className="size-5 shrink-0 text-neutral-500" aria-hidden="true" />
         <span className="sr-only">Поиск</span>
-        <input
-          className="min-w-0 flex-1 border-0 bg-transparent text-xl text-neutral-950 outline-none placeholder:text-neutral-400"
+        <Input
+          className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-xl text-neutral-950 shadow-none outline-none placeholder:text-neutral-400 focus-visible:border-0 focus-visible:ring-0"
           onChange={(event) => setQuery(event.target.value)}
           placeholder="26233 или RU000A101F94"
           type="search"
@@ -166,9 +168,12 @@ function BondSearchResult({ bond }: { bond: BasicBondInfo }) {
         </dl>
 
         {bond.offer_date ? (
-          <p className="inline-flex rounded-md bg-emerald-50 px-2 py-1 text-sm font-semibold text-emerald-700">
+          <Badge
+            variant="outline"
+            className="border-transparent bg-emerald-50 px-2 py-1 text-sm font-semibold text-emerald-700"
+          >
             Оферта {formatLocalDate(bond.offer_date)}
-          </p>
+          </Badge>
         ) : null}
       </article>
     </Link>
@@ -179,15 +184,16 @@ function ListLevelBadge({ listLevel }: { listLevel: BasicBondInfo["list_level"] 
   const isSuccessLevel = listLevel === 1 || listLevel === 2;
 
   return (
-    <span
+    <Badge
+      variant="outline"
       className={
         isSuccessLevel
-          ? "mt-1 shrink-0 rounded-md bg-emerald-50 px-2 py-1 text-sm font-semibold text-emerald-700"
-          : "mt-1 shrink-0 rounded-md bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-700"
+          ? "mt-1 shrink-0 border-transparent bg-emerald-50 px-2 py-1 text-sm font-semibold text-emerald-700"
+          : "mt-1 shrink-0 border-transparent bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-700"
       }
     >
       Уровень {listLevel}
-    </span>
+    </Badge>
   );
 }
 
