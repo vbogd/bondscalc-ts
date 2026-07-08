@@ -115,7 +115,10 @@ describe("CalculatorPage", () => {
     expect(
       screen.queryByRole("menuitem", { name: "Доходъ" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Оферта" })).toHaveClass("bg-blue-600");
+    expect(screen.getByRole("radio", { name: "Оферта" })).toHaveAttribute(
+      "data-state",
+      "on",
+    );
     expect(screen.getByLabelText("цена продажи, %")).toHaveValue("99.5");
     expect(screen.getByText("158,52 ₽")).toBeInTheDocument();
     expect(screen.getByText("17,37 %")).toBeInTheDocument();
@@ -166,8 +169,11 @@ describe("CalculatorPage", () => {
     renderCalculatorPage();
 
     expect(await screen.findByRole("heading", { name: "Тест 001" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Погашение" })).toHaveClass("bg-blue-600");
-    expect(screen.getByRole("button", { name: "Оферта" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Погашение" })).toHaveAttribute(
+      "data-state",
+      "on",
+    );
+    expect(screen.getByRole("radio", { name: "Оферта" })).toBeDisabled();
     expect(screen.getByLabelText("дата продажи")).toHaveValue("2030-06-15");
   });
 
@@ -179,7 +185,7 @@ describe("CalculatorPage", () => {
     renderCalculatorPage();
 
     await screen.findByRole("heading", { name: "Тест 001" });
-    await user.click(screen.getByRole("button", { name: "Продажа" }));
+    await user.click(screen.getByRole("radio", { name: "Продажа" }));
     await user.clear(screen.getByLabelText("цена продажи, %"));
     await user.type(screen.getByLabelText("цена продажи, %"), "110");
 
@@ -209,7 +215,7 @@ describe("CalculatorPage", () => {
     fireEvent.change(screen.getByLabelText("дата сделки"), {
       target: { value: "2026-06-10" },
     });
-    await user.click(screen.getByRole("button", { name: "Продажа" }));
+    await user.click(screen.getByRole("radio", { name: "Продажа" }));
 
     expect(screen.getByLabelText("дата продажи")).toHaveValue("2026-06-15");
   });
@@ -280,11 +286,12 @@ describe("CalculatorPage", () => {
 
     renderCalculatorPage();
 
-    expect(
-      await screen.findByText(
-        "Будущие купоны не определены. XIRR рассчитана при сохранении ставки 10 % годовых. Фактическая доходность может отличаться.",
-      ),
-    ).toBeInTheDocument();
+    const warning = await screen.findByText(
+      "Будущие купоны не определены. XIRR рассчитана при сохранении ставки 10 % годовых. Фактическая доходность может отличаться.",
+    );
+
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveClass("text-semantic-warning");
   });
 });
 

@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Loader2, Search } from "lucide-react";
-import type { ReactNode } from "react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -9,8 +8,7 @@ import {
 } from "../shared/api/moex";
 import type { BasicBondInfo, LocalDate } from "../shared/api/moex";
 import { loadSearchQuery, saveSearchQuery } from "../shared/persistence";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { BondBadge, SearchInput, StateMessage } from "../shared/ui/FinancialUi";
 
 const BOND_SEARCH_DEBOUNCE_MS = 200;
 
@@ -43,51 +41,45 @@ export function SearchPage() {
   }, [query]);
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-6">
       <header className="space-y-2">
-        <p className="text-sm font-medium text-emerald-700">MOEX bonds</p>
-        <h1 className="text-3xl font-semibold tracking-normal text-neutral-950">
+        <p className="text-sm font-medium text-body">MOEX bonds</p>
+        <h1 className="text-3xl font-medium tracking-normal text-foreground">
           Поиск облигаций
         </h1>
       </header>
 
-      <label className="flex h-14 items-center gap-3 rounded-lg border border-neutral-300 bg-white px-4 shadow-sm focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
-        <Search className="size-5 shrink-0 text-neutral-500" aria-hidden="true" />
-        <span className="sr-only">Поиск</span>
-        <Input
-          className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-xl text-neutral-950 shadow-none outline-none placeholder:text-neutral-400 focus-visible:border-0 focus-visible:ring-0"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="26233 или RU000A101F94"
-          type="search"
-          value={query}
-        />
-      </label>
+      <SearchInput
+        onChange={setQuery}
+        placeholder="26233 или RU000A101F94"
+        value={query}
+      />
 
       {!canSearch ? (
-        <SearchState
+        <StateMessage
           title="Введите минимум 3 символа"
           text="Можно искать по SECID, ISIN или части названия облигации."
         />
       ) : isDebouncing || isFetching ? (
-        <SearchState
+        <StateMessage
           icon={<Loader2 className="size-5 animate-spin" aria-hidden="true" />}
           title="Ищем облигации"
           text="Запрашиваем данные MOEX ISS."
         />
       ) : isError ? (
-        <SearchState
+        <StateMessage
           icon={<AlertCircle className="size-5" aria-hidden="true" />}
           title="Не удалось загрузить поиск"
           text={getErrorMessage(error)}
           tone="danger"
         />
       ) : sortedBonds.length === 0 ? (
-        <SearchState
+        <StateMessage
           title="Ничего не найдено"
           text="Проверьте SECID, ISIN или попробуйте другой фрагмент названия."
         />
       ) : (
-        <div className="divide-y divide-neutral-200 border-y border-neutral-200">
+        <div className="divide-y divide-border border-y border-border">
           {sortedBonds.map((bond) => (
             <BondSearchResult key={bond.secid} bond={bond} />
           ))}
@@ -120,47 +112,47 @@ function BondSearchResult({ bond }: { bond: BasicBondInfo }) {
 
   return (
     <Link
-      className="block py-5 transition-colors hover:bg-white focus-visible:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
+      className="block py-5 transition-colors hover:bg-surface-soft focus-visible:bg-surface-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15"
       to={`/bond/${bond.secid}`}
     >
       <article className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-2xl font-semibold text-neutral-950">
+            <h2 className="truncate text-xl font-medium text-foreground sm:text-2xl">
               {bond.shortname}
             </h2>
-            <p className="text-base text-neutral-500">{bond.isin}</p>
+            <p className="number truncate text-sm text-body sm:text-base">{bond.isin}</p>
           </div>
           <ListLevelBadge listLevel={bond.list_level} />
         </div>
 
-        <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-lg">
-          <dt className="text-neutral-500">Погашение</dt>
-          <dd className="font-medium text-neutral-950">
+        <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-base sm:text-lg">
+          <dt className="text-body">Погашение</dt>
+          <dd className="number text-right font-medium text-foreground">
             {formatLocalDate(bond.mat_date)}
           </dd>
-          <dt className="text-neutral-500">Дата купона</dt>
-          <dd className="font-medium text-neutral-950">
+          <dt className="text-body">Дата купона</dt>
+          <dd className="number text-right font-medium text-foreground">
             {formatLocalDate(bond.coupon_date)}
           </dd>
-          <dt className="text-neutral-500">Купон</dt>
-          <dd className="font-medium text-neutral-950">
+          <dt className="text-body">Купон</dt>
+          <dd className="number text-right font-medium text-foreground">
             {formatMoney(bond.coupon_value, bond.face_unit)}
           </dd>
-          <dt className="text-neutral-500">Ставка купона</dt>
-          <dd className="font-semibold text-neutral-950">
+          <dt className="text-body">Ставка купона</dt>
+          <dd className="number text-right font-semibold text-foreground">
             {formatPercent(bond.coupon_percent)}
           </dd>
-          <dt className="text-neutral-500">Тек. доходность</dt>
-          <dd className="font-semibold text-neutral-950">
+          <dt className="text-body">Тек. доходность</dt>
+          <dd className="number text-right font-semibold text-foreground">
             {formatPercent(currentYield, { fractionDigits: 2 })}
           </dd>
-          <dt className="text-neutral-500">Цена</dt>
+          <dt className="text-body">Цена</dt>
           <dd
             className={
               displayPrice !== null && displayPrice > 100
-                ? "font-semibold text-red-600"
-                : "font-medium text-neutral-950"
+                ? "number text-right font-semibold text-semantic-down"
+                : "number text-right font-medium text-foreground"
             }
           >
             {formatPrice(displayPrice)}
@@ -168,12 +160,7 @@ function BondSearchResult({ bond }: { bond: BasicBondInfo }) {
         </dl>
 
         {bond.offer_date ? (
-          <Badge
-            variant="outline"
-            className="border-transparent bg-emerald-50 px-2 py-1 text-sm font-semibold text-emerald-700"
-          >
-            Оферта {formatLocalDate(bond.offer_date)}
-          </Badge>
+          <BondBadge>Оферта {formatLocalDate(bond.offer_date)}</BondBadge>
         ) : null}
       </article>
     </Link>
@@ -184,48 +171,12 @@ function ListLevelBadge({ listLevel }: { listLevel: BasicBondInfo["list_level"] 
   const isSuccessLevel = listLevel === 1 || listLevel === 2;
 
   return (
-    <Badge
-      variant="outline"
-      className={
-        isSuccessLevel
-          ? "mt-1 shrink-0 border-transparent bg-emerald-50 px-2 py-1 text-sm font-semibold text-emerald-700"
-          : "mt-1 shrink-0 border-transparent bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-700"
-      }
+    <BondBadge
+      className="mt-1 shrink-0"
+      tone={isSuccessLevel ? "up" : "warning"}
     >
       Уровень {listLevel}
-    </Badge>
-  );
-}
-
-function SearchState({
-  icon,
-  title,
-  text,
-  tone = "neutral",
-}: {
-  icon?: ReactNode;
-  title: string;
-  text: string;
-  tone?: "neutral" | "danger";
-}) {
-  return (
-    <div
-      className={
-        tone === "danger"
-          ? "rounded-lg border border-red-200 bg-red-50 px-4 py-5 text-red-900"
-          : "rounded-lg border border-neutral-200 bg-white px-4 py-5 text-neutral-700"
-      }
-    >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 text-current">
-          {icon ?? <Search className="size-5" aria-hidden="true" />}
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <p className="mt-1 text-base">{text}</p>
-        </div>
-      </div>
-    </div>
+    </BondBadge>
   );
 }
 

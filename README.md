@@ -82,6 +82,18 @@ npm run build
 npm run preview
 ```
 
+## Static hosting
+
+Приложение собирается как browser-only SPA:
+
+- build command: `npm run build`
+- output directory: `dist`
+- preview command: `npm run preview`
+
+Для Cloudflare Pages, Vercel Static, Netlify или похожего static hosting нужно отдавать `dist/` как статическую директорию. Так как в приложении есть прямые URL вида `/bond/:secid`, настройте rewrite fallback на `index.html`, чтобы обновление страницы и прямое открытие карточки облигации работали без 404.
+
+Для GitHub Pages на project site дополнительно потребуется задать `base` в `vite.config.ts` под имя репозитория и учесть тот же SPA fallback. В текущей конфигурации `base` не задан, поэтому сборка рассчитана на hosting от корня домена.
+
 ## Полезные документы
 
 - [План проекта](./docs/PROJECT_PLAN.md)

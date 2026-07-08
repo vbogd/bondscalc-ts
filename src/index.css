@@ -6,6 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-body: var(--body);
+  --color-body-strong: var(--body-strong);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -14,12 +16,18 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-surface-soft: var(--surface-soft);
+  --color-surface-strong: var(--surface-strong);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-muted-soft: var(--muted-soft);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-semantic-up: var(--semantic-up);
+  --color-semantic-down: var(--semantic-down);
+  --color-semantic-warning: var(--semantic-warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -30,28 +38,36 @@
 }
 
 :root {
-  --radius: 0.5rem;
-  --background: #f6f7f8;
-  --foreground: #20242a;
+  --radius: 0.75rem;
+  --background: #ffffff;
+  --foreground: #0a0b0d;
+  --body: #5b616e;
+  --body-strong: #0a0b0d;
   --card: #ffffff;
-  --card-foreground: #20242a;
+  --card-foreground: #0a0b0d;
   --popover: #ffffff;
-  --popover-foreground: #20242a;
-  --primary: #2563eb;
+  --popover-foreground: #0a0b0d;
+  --primary: #0052ff;
   --primary-foreground: #ffffff;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #171717;
-  --muted: #f5f5f5;
-  --muted-foreground: #737373;
-  --accent: #f5f5f5;
-  --accent-foreground: #171717;
-  --destructive: #dc2626;
+  --secondary: #eef0f3;
+  --secondary-foreground: #0a0b0d;
+  --surface-soft: #f7f7f7;
+  --surface-strong: #eef0f3;
+  --muted: #f7f7f7;
+  --muted-foreground: #5b616e;
+  --muted-soft: #a8acb3;
+  --accent: #eef0f3;
+  --accent-foreground: #0a0b0d;
+  --destructive: #cf202f;
   --destructive-foreground: #ffffff;
-  --border: #d4d4d4;
-  --input: #d4d4d4;
-  --ring: #3b82f6;
-  color: #20242a;
-  background: #f6f7f8;
+  --semantic-up: #05b169;
+  --semantic-down: #cf202f;
+  --semantic-warning: #9a6700;
+  --border: #dee1e6;
+  --input: #dee1e6;
+  --ring: #0052ff;
+  color: #0a0b0d;
+  background: #ffffff;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -69,9 +85,17 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  background: #ffffff;
 }
 
 button,
 input {
   font: inherit;
+}
+
+.number {
+  font-family:
+    "JetBrains Mono", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
 }
