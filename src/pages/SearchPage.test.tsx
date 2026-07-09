@@ -81,7 +81,7 @@ describe("SearchPage", () => {
       "href",
       "/bond/RU000A106A86",
     );
-    expect(screen.getByText("Уровень 1")).toHaveClass("text-semantic-up");
+    expect(screen.getByText("Уровень 1")).toBeInTheDocument();
     expect(screen.getByText("Оферта 05.03.2028")).toBeInTheDocument();
     expect(screen.getByText("03.03.2033")).toBeInTheDocument();
     expect(screen.getByText("Дата купона")).toBeInTheDocument();
@@ -101,9 +101,7 @@ describe("SearchPage", () => {
 
     await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "rzd");
 
-    expect(await screen.findByText("Уровень 3")).toHaveClass(
-      "text-semantic-warning",
-    );
+    expect(await screen.findByText("Уровень 3")).toBeInTheDocument();
   });
 
   it("sorts search results by short name", async () => {
@@ -138,7 +136,7 @@ describe("SearchPage", () => {
 
     await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "26240");
 
-    expect(await screen.findByText("101,25")).toHaveClass("text-semantic-down");
+    expect(await screen.findByText("101,25")).toHaveClass("text-destructive");
   });
 
   it("shows current yield adjusted by bond price with two fraction digits", async () => {

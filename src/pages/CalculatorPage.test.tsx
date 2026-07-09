@@ -145,7 +145,7 @@ describe("CalculatorPage", () => {
       Array.from(
         screen
           .getByRole("heading", { name: "Результаты" })
-          .closest("section")!
+          .closest('[data-slot="card"]')!
           .querySelectorAll("dt"),
         (element) => element.firstChild?.textContent,
       ),
@@ -158,6 +158,29 @@ describe("CalculatorPage", () => {
     ]);
     expect(screen.getByText("НКД покупки")).toBeInTheDocument();
     expect(screen.getByText("получено купонов")).toBeInTheDocument();
+  });
+
+  it("copies the ISIN from the issue header", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    await user.click(
+      screen.getByRole("button", { name: "Скопировать ISIN RU000A000000" }),
+    );
+
+    expect(writeText).toHaveBeenCalledWith("RU000A000000");
+    expect(
+      screen.getByRole("button", { name: "ISIN RU000A000000 скопирован" }),
+    ).toBeInTheDocument();
   });
 
   it("disables offer mode and falls back to maturity when there is no offer", async () => {
@@ -287,11 +310,11 @@ describe("CalculatorPage", () => {
     renderCalculatorPage();
 
     const warning = await screen.findByText(
-      "Будущие купоны не определены. XIRR рассчитана при сохранении ставки 10 % годовых. Фактическая доходность может отличаться.",
+      "Будущие купоны не определены. XIRR рассчитана при сохранении ставки купона 10 % годовых. Фактическая доходность может отличаться.",
     );
 
     expect(warning).toBeInTheDocument();
-    expect(warning).toHaveClass("text-semantic-warning");
+    expect(warning).toHaveClass("text-muted-foreground");
   });
 });
 

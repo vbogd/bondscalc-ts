@@ -6,8 +6,6 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-body: var(--body);
-  --color-body-strong: var(--body-strong);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -16,18 +14,12 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-surface-soft: var(--surface-soft);
-  --color-surface-strong: var(--surface-strong);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-muted-soft: var(--muted-soft);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --color-semantic-up: var(--semantic-up);
-  --color-semantic-down: var(--semantic-down);
-  --color-semantic-warning: var(--semantic-warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -38,64 +30,47 @@
 }
 
 :root {
-  --radius: 0.75rem;
-  --background: #ffffff;
-  --foreground: #0a0b0d;
-  --body: #5b616e;
-  --body-strong: #0a0b0d;
-  --card: #ffffff;
-  --card-foreground: #0a0b0d;
-  --popover: #ffffff;
-  --popover-foreground: #0a0b0d;
-  --primary: #0052ff;
-  --primary-foreground: #ffffff;
-  --secondary: #eef0f3;
-  --secondary-foreground: #0a0b0d;
-  --surface-soft: #f7f7f7;
-  --surface-strong: #eef0f3;
-  --muted: #f7f7f7;
-  --muted-foreground: #5b616e;
-  --muted-soft: #a8acb3;
-  --accent: #eef0f3;
-  --accent-foreground: #0a0b0d;
-  --destructive: #cf202f;
-  --destructive-foreground: #ffffff;
-  --semantic-up: #05b169;
-  --semantic-down: #cf202f;
-  --semantic-warning: #9a6700;
-  --border: #dee1e6;
-  --input: #dee1e6;
-  --ring: #0052ff;
-  color: #0a0b0d;
-  background: #ffffff;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
-}
+@layer base {
+  * {
+    box-sizing: border-box;
+    @apply border-border outline-ring/50;
+  }
 
-body {
-  min-width: 320px;
-  min-height: 100vh;
-  margin: 0;
-  background: #ffffff;
-}
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    @apply bg-background text-foreground;
+  }
 
-button,
-input {
-  font: inherit;
-}
-
-.number {
-  font-family:
-    "JetBrains Mono", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
-    Consolas, "Liberation Mono", monospace;
-  font-variant-numeric: tabular-nums;
+  button,
+  input {
+    font: inherit;
+  }
 }

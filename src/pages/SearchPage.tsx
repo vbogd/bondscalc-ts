@@ -43,7 +43,7 @@ export function SearchPage() {
   return (
     <section className="space-y-6">
       <header className="space-y-2">
-        <p className="text-sm font-medium text-body">MOEX bonds</p>
+        <p className="text-sm font-medium text-muted-foreground">MOEX bonds</p>
         <h1 className="text-3xl font-medium tracking-normal text-foreground">
           Поиск облигаций
         </h1>
@@ -112,7 +112,7 @@ function BondSearchResult({ bond }: { bond: BasicBondInfo }) {
 
   return (
     <Link
-      className="block py-5 transition-colors hover:bg-surface-soft focus-visible:bg-surface-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15"
+      className="block py-5 transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       to={`/bond/${bond.secid}`}
     >
       <article className="space-y-3">
@@ -121,38 +121,40 @@ function BondSearchResult({ bond }: { bond: BasicBondInfo }) {
             <h2 className="truncate text-xl font-medium text-foreground sm:text-2xl">
               {bond.shortname}
             </h2>
-            <p className="number truncate text-sm text-body sm:text-base">{bond.isin}</p>
+            <p className="truncate text-sm tabular-nums text-muted-foreground sm:text-base">
+              {bond.isin}
+            </p>
           </div>
           <ListLevelBadge listLevel={bond.list_level} />
         </div>
 
         <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-base sm:text-lg">
-          <dt className="text-body">Погашение</dt>
-          <dd className="number text-right font-medium text-foreground">
+          <dt className="text-muted-foreground">Погашение</dt>
+          <dd className="text-right font-medium tabular-nums text-foreground">
             {formatLocalDate(bond.mat_date)}
           </dd>
-          <dt className="text-body">Дата купона</dt>
-          <dd className="number text-right font-medium text-foreground">
+          <dt className="text-muted-foreground">Дата купона</dt>
+          <dd className="text-right font-medium tabular-nums text-foreground">
             {formatLocalDate(bond.coupon_date)}
           </dd>
-          <dt className="text-body">Купон</dt>
-          <dd className="number text-right font-medium text-foreground">
+          <dt className="text-muted-foreground">Купон</dt>
+          <dd className="text-right font-medium tabular-nums text-foreground">
             {formatMoney(bond.coupon_value, bond.face_unit)}
           </dd>
-          <dt className="text-body">Ставка купона</dt>
-          <dd className="number text-right font-semibold text-foreground">
+          <dt className="text-muted-foreground">Ставка купона</dt>
+          <dd className="text-right font-semibold tabular-nums text-foreground">
             {formatPercent(bond.coupon_percent)}
           </dd>
-          <dt className="text-body">Тек. доходность</dt>
-          <dd className="number text-right font-semibold text-foreground">
+          <dt className="text-muted-foreground">Тек. доходность</dt>
+          <dd className="text-right font-semibold tabular-nums text-foreground">
             {formatPercent(currentYield, { fractionDigits: 2 })}
           </dd>
-          <dt className="text-body">Цена</dt>
+          <dt className="text-muted-foreground">Цена</dt>
           <dd
             className={
               displayPrice !== null && displayPrice > 100
-                ? "number text-right font-semibold text-semantic-down"
-                : "number text-right font-medium text-foreground"
+                ? "text-right font-semibold tabular-nums text-destructive"
+                : "text-right font-medium tabular-nums text-foreground"
             }
           >
             {formatPrice(displayPrice)}

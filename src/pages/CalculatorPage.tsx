@@ -1,6 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Check,
+  Copy,
+  ExternalLink,
+  Loader2,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getBasicBondInfo,
@@ -29,11 +36,24 @@ import {
 } from "../shared/ui/FinancialUi";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FieldGroup, FieldLegend, FieldSet } from "@/components/ui/field";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type CalculatorMode = "maturity" | "offer" | "sale";
 
@@ -53,7 +73,6 @@ type CalculationRow = {
   value: string;
   strong?: boolean;
   tooltip?: string;
-  tooltipAlign?: "left" | "right";
   tooltipLabel?: string;
   valueTone?: "neutral" | "danger" | "up" | "down";
 };
@@ -88,6 +107,8 @@ export function CalculatorPage() {
   const normalizedSecid = secid.trim().toUpperCase();
   const [mode, setMode] = useState<CalculatorMode>("maturity");
   const [form, setForm] = useState<CalculatorForm>(() => createDefaultForm());
+  const [copiedIsin, setCopiedIsin] = useState(false);
+  const copyResetTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     saveCalculatorPreferences({
@@ -95,6 +116,14 @@ export function CalculatorPage() {
       taxPercent: form.taxPercent,
     });
   }, [form.commissionPercent, form.taxPercent]);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+    };
+  }, []);
 
   const { data, error, isError, isLoading } = useQuery({
     queryKey: ["bond-calculator", normalizedSecid],
@@ -197,8 +226,10 @@ export function CalculatorPage() {
   );
 
   const title = data?.details.shortName ?? data?.basicInfo.shortname ?? normalizedSecid;
-  const subtitle = data?.details.isin ?? data?.basicInfo.isin ?? normalizedSecid;
-  const dohodBondIsin = data?.details.isin ?? data?.basicInfo.isin ?? null;
+  const bondIsin = data?.details.isin ?? data?.basicInfo.isin ?? null;
+  const subtitle = bondIsin ?? normalizedSecid;
+  const identifierLabel = bondIsin ? "ISIN" : "SECID";
+  const dohodBondIsin = bondIsin;
   const dohodBondUrl = dohodBondIsin
     ? `https://analytics.dohod.ru/bond/${encodeURIComponent(dohodBondIsin)}`
     : null;
@@ -240,58 +271,26 @@ export function CalculatorPage() {
     }));
   }
 
+  async function handleCopyIsin(isin: string) {
+    try {
+      await navigator.clipboard.writeText(isin);
+      setCopiedIsin(true);
+
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+
+      copyResetTimerRef.current = window.setTimeout(() => {
+        setCopiedIsin(false);
+        copyResetTimerRef.current = null;
+      }, 1800);
+    } catch {
+      setCopiedIsin(false);
+    }
+  }
+
   return (
     <section className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <Button
-            asChild
-            variant="outline"
-            size="icon"
-            className="mb-3 size-11 rounded-full border-border bg-card text-body shadow-none hover:bg-surface-strong"
-          >
-            <Link to="/" aria-label="Назад к поиску">
-              <ArrowLeft className="size-5" aria-hidden="true" />
-            </Link>
-          </Button>
-          <h1 className="break-words text-3xl font-medium tracking-normal text-foreground">
-            {title}
-          </h1>
-          <p className="number mt-1 break-all text-base text-body sm:text-lg">
-            {subtitle}
-          </p>
-        </div>
-        {externalLinks.length > 0 ? (
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-11 shrink-0 rounded-full border-border bg-card text-body shadow-none hover:bg-surface-strong"
-                aria-label="Внешние ссылки"
-              >
-                <ExternalLink className="size-5" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44 max-w-[calc(100vw-2rem)]">
-              {externalLinks.map((externalLink) => (
-                <DropdownMenuItem asChild key={externalLink.href}>
-                  <a
-                    className="cursor-pointer gap-3 text-sm font-medium text-foreground"
-                    href={externalLink.href}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {externalLink.icon}
-                    <span>{externalLink.label}</span>
-                  </a>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
-      </header>
-
       {isLoading ? (
         <StateMessage
           icon={<Loader2 className="size-5 animate-spin" aria-hidden="true" />}
@@ -313,30 +312,110 @@ export function CalculatorPage() {
         />
       ) : (
         <>
-          <ResultPanel title="Параметры выпуска">
-            <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 px-4 py-4 text-base">
-              <ResultRow
-                label="погашение"
-                value={formatLocalDate(targetDates.maturityDate)}
-              />
-              <ResultRow
-                label="ближайший купон"
-                value={formatLocalDate(data.basicInfo.coupon_date)}
-              />
-              <ResultRow
-                label="купон"
-                value={formatMoney(data.basicInfo.coupon_value, data.basicInfo.face_unit)}
-              />
-              <ResultRow
-                label="оферта"
-                value={formatLocalDate(targetDates.offerDate)}
-              />
-            </dl>
-          </ResultPanel>
+          <div className="space-y-3">
+            <header className="flex items-center justify-between gap-3">
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="shrink-0 [&_svg]:size-6"
+              >
+                <Link to="/" aria-label="Назад к поиску">
+                  <ArrowLeft className="size-5" aria-hidden="true" />
+                </Link>
+              </Button>
+              {externalLinks.length > 0 ? (
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 text-muted-foreground hover:text-foreground [&_svg]:size-6"
+                      aria-label="Внешние ссылки"
+                    >
+                      <ExternalLink className="size-5" aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44 max-w-[calc(100vw-2rem)]">
+                    {externalLinks.map((externalLink) => (
+                      <DropdownMenuItem asChild key={externalLink.href}>
+                        <a
+                          className="cursor-pointer gap-3 text-sm font-medium text-foreground"
+                          href={externalLink.href}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {externalLink.icon}
+                          <span>{externalLink.label}</span>
+                        </a>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+            </header>
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <h1 className="min-w-0 flex-1 break-words text-2xl font-medium leading-tight tracking-normal text-foreground">
+                      {title}
+                    </h1>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            className="inline-flex max-w-full shrink-0 items-center gap-1.5 break-all text-left text-sm font-medium leading-5 tabular-nums text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            onClick={() => void handleCopyIsin(subtitle)}
+                            type="button"
+                            aria-label={
+                              copiedIsin
+                                ? `${identifierLabel} ${subtitle} скопирован`
+                                : `Скопировать ${identifierLabel} ${subtitle}`
+                            }
+                          >
+                            <span className="min-w-0 break-all">{subtitle}</span>
+                            {copiedIsin ? (
+                              <Check className="size-4 shrink-0" aria-hidden="true" />
+                            ) : (
+                              <Copy className="size-4 shrink-0" aria-hidden="true" />
+                            )}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {copiedIsin ? "Скопировано" : `Скопировать ${identifierLabel}`}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-base leading-5">
+                  <ResultRow
+                    label="погашение"
+                    value={formatLocalDate(targetDates.maturityDate)}
+                  />
+                  <ResultRow
+                    label="ближайший купон"
+                    value={formatLocalDate(data.basicInfo.coupon_date)}
+                  />
+                  <ResultRow
+                    label="купон"
+                    value={formatMoney(data.basicInfo.coupon_value, data.basicInfo.face_unit)}
+                  />
+                  <ResultRow
+                    label="оферта"
+                    value={formatLocalDate(targetDates.offerDate)}
+                  />
+                </dl>
+              </CardContent>
+            </Card>
+          </div>
 
-          <section className="space-y-3">
-            <h2 className="text-xl font-medium text-foreground">Расчетные параметры</h2>
-            <div className="grid grid-cols-2 gap-2">
+          <FieldSet>
+            <FieldLegend className="text-xl">Параметры расчета</FieldLegend>
+            <FieldGroup className="grid-cols-2 gap-4">
               <InputField
                 label="номинал"
                 onChange={(value) => updateField("faceValue", value)}
@@ -357,12 +436,12 @@ export function CalculatorPage() {
                 onChange={(value) => updateField("taxPercent", value)}
                 value={form.taxPercent}
               />
-            </div>
-          </section>
+            </FieldGroup>
+          </FieldSet>
 
-          <section className="space-y-3">
-            <h2 className="text-xl font-medium text-foreground">Покупка</h2>
-            <div className="grid grid-cols-2 gap-2">
+          <FieldSet>
+            <FieldLegend className="text-xl">Покупка</FieldLegend>
+            <FieldGroup className="grid-cols-2 gap-4">
               <InputField
                 label="дата сделки"
                 onChange={(value) => updateField("buyDate", value)}
@@ -374,11 +453,11 @@ export function CalculatorPage() {
                 onChange={(value) => updateField("buyPrice", value)}
                 value={form.buyPrice}
               />
-            </div>
-          </section>
+            </FieldGroup>
+          </FieldSet>
 
-          <section className="space-y-3">
-            <h2 className="text-xl font-medium text-foreground">Сценарий выхода</h2>
+          <FieldSet>
+            <FieldLegend className="text-xl">Сценарий выхода</FieldLegend>
             <ModeToggle
               value={mode}
               onChange={handleModeChange}
@@ -388,7 +467,7 @@ export function CalculatorPage() {
                 value: modeKey,
               }))}
             />
-            <div className="grid grid-cols-2 gap-2">
+            <FieldGroup className="grid-cols-2 gap-4">
               <InputField
                 label="дата продажи"
                 onChange={(value) => updateField("sellDate", value)}
@@ -400,20 +479,20 @@ export function CalculatorPage() {
                 onChange={(value) => updateField("sellPrice", value)}
                 value={form.sellPrice}
               />
-            </div>
-          </section>
+            </FieldGroup>
+          </FieldSet>
 
           <ResultPanel
             title="Результаты"
             footer={
               calculationView.warnings.length > 0 ? (
-                <div className="bg-semantic-warning/10 px-4 py-3 text-sm font-medium text-semantic-warning">
+                <div className="text-sm font-medium text-muted-foreground">
                   {calculationView.warnings.join(" ")}
                 </div>
               ) : null
             }
           >
-            <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 px-4 py-5 text-lg sm:text-xl">
+            <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-lg leading-6 sm:text-xl">
               {calculationView.summaryRows.map((row) => (
                 <ResultRow key={row.label} {...row} />
               ))}
@@ -423,11 +502,11 @@ export function CalculatorPage() {
           <ResultPanel title="Детализация">
             <div className="divide-y divide-border">
               {calculationView.detailSections.map((section) => (
-                <div className="px-4 py-4" key={section.title}>
-                  <h3 className="text-xs font-semibold uppercase leading-5 text-body">
+                <div className="py-4 first:pt-0 last:pb-0" key={section.title}>
+                  <h3 className="text-xs font-semibold uppercase leading-5 text-muted-foreground">
                     {section.title}
                   </h3>
-                  <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 text-base">
+                  <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-base leading-5">
                     {section.rows.map((row) => (
                       <ResultRow key={`${section.title}-${row.label}`} {...row} />
                     ))}
@@ -657,7 +736,6 @@ function createCalculationView({
       {
         label: "тек. доходность",
         tooltip: CURRENT_YIELD_TOOLTIP,
-        tooltipAlign: "left",
         tooltipLabel: "Формула текущей доходности",
         value: formatPercent(
           calculateCurrentYieldAfterTax({
@@ -984,7 +1062,6 @@ function createEmptyCalculationView(warnings: string[] = []): CalculationView {
         label: "тек. доходность",
         value: "—",
         tooltip: CURRENT_YIELD_TOOLTIP,
-        tooltipAlign: "left",
         tooltipLabel: "Формула текущей доходности",
       },
       { label: "прибыль после налога", value: "—", strong: true },

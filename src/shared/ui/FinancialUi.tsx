@@ -1,6 +1,15 @@
 import { CircleHelp, Search } from "lucide-react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
@@ -25,11 +34,14 @@ export function SearchInput({
   value: string;
 }) {
   return (
-    <label className="flex min-h-12 items-center gap-3 rounded-full bg-surface-strong px-5 transition-shadow focus-within:ring-4 focus-within:ring-primary/15">
-      <Search className="size-5 shrink-0 text-body" aria-hidden="true" />
+    <label className="relative block">
       <span className="sr-only">{label}</span>
+      <Search
+        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        aria-hidden="true"
+      />
       <Input
-        className="h-11 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-base text-foreground shadow-none outline-none placeholder:text-muted-soft focus-visible:border-0 focus-visible:ring-0 sm:text-lg"
+        className="h-11 pl-9 text-base"
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type="search"
@@ -50,13 +62,12 @@ export function BondBadge({
 }) {
   return (
     <Badge
-      variant="outline"
+      variant={tone === "danger" ? "destructive" : "outline"}
       className={cn(
-        "rounded-full border-transparent bg-surface-strong px-3 py-1 text-xs font-semibold text-foreground",
-        tone === "danger" && "text-semantic-down",
-        tone === "up" && "text-semantic-up",
-        tone === "down" && "text-semantic-down",
-        tone === "warning" && "text-semantic-warning",
+        "text-xs font-medium",
+        tone === "up" && "border-primary/20 bg-secondary text-secondary-foreground",
+        tone === "down" && "text-destructive",
+        tone === "warning" && "text-muted-foreground",
         className,
       )}
     >
@@ -83,11 +94,11 @@ export function ModeToggle<TValue extends string>({
           onChange(nextValue as TValue);
         }
       }}
-      className="grid min-h-12 w-full grid-cols-3 rounded-full border border-border bg-surface-strong p-1 text-sm font-semibold"
+      className="grid w-full grid-cols-3 rounded-md border bg-background p-1"
     >
       {items.map((item) => (
         <ToggleGroupItem
-          className="min-h-11 rounded-full px-2 text-body transition-colors hover:bg-white hover:text-foreground disabled:text-muted-soft data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm"
+          className="h-9 min-w-0 px-2 text-sm"
           disabled={item.disabled}
           key={item.value}
           value={item.value}
@@ -110,19 +121,19 @@ export function InputField({
   type?: "date" | "text";
   value: string;
 }) {
+  const inputId = useId();
+
   return (
-    <label className="block min-w-0 rounded-xl border border-border bg-card px-3 py-3 transition-shadow focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15">
-      <span className="block text-xs font-semibold uppercase leading-5 text-body">
-        {label}
-      </span>
+    <Field className="min-w-0">
+      <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
       <Input
-        className="number mt-1 h-11 w-full min-w-0 border-0 bg-transparent px-0 py-0 text-xl font-medium text-foreground shadow-none outline-none focus-visible:border-0 focus-visible:ring-0"
+        id={inputId}
         inputMode={type === "date" ? undefined : "decimal"}
         onChange={(event) => onChange(event.target.value)}
         type={type}
         value={value}
       />
-    </label>
+    </Field>
   );
 }
 
@@ -136,13 +147,15 @@ export function ResultPanel({
   title: string;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="border-b border-border px-4 py-4">
-        <h2 className="text-xl font-medium text-foreground">{title}</h2>
-      </div>
-      {children}
-      {footer ? <div className="border-t border-border">{footer}</div> : null}
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2 className="text-xl">{title}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+      {footer ? <CardFooter>{footer}</CardFooter> : null}
+    </Card>
   );
 }
 
@@ -150,7 +163,6 @@ export function ResultRow({
   label,
   strong = false,
   tooltip,
-  tooltipAlign = "right",
   tooltipLabel = `Описание показателя «${label}»`,
   value,
   valueTone = "neutral",
@@ -159,7 +171,6 @@ export function ResultRow({
   value: string;
   strong?: boolean;
   tooltip?: string;
-  tooltipAlign?: "left" | "right";
   tooltipLabel?: string;
   valueTone?: Tone;
 }) {
@@ -167,7 +178,7 @@ export function ResultRow({
 
   return (
     <>
-      <dt className="flex min-w-0 items-center gap-1.5 text-body">
+      <dt className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
         <span className="min-w-0">{label}</span>
         {tooltip ? (
           <TooltipProvider>
@@ -176,18 +187,13 @@ export function ResultRow({
                 <button
                   aria-describedby={tooltipId}
                   aria-label={tooltipLabel}
-                  className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-muted-soft outline-none transition-colors hover:text-body-strong focus-visible:text-body-strong focus-visible:ring-2 focus-visible:ring-primary"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   type="button"
                 >
                   <CircleHelp className="size-4" aria-hidden="true" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent
-                align={tooltipAlign === "left" ? "start" : "end"}
-                className="max-w-[min(18rem,calc(100vw-2rem))] data-[state=closed]:hidden"
-                forceMount
-                sideOffset={8}
-              >
+              <TooltipContent sideOffset={8}>
                 {tooltip}
               </TooltipContent>
             </Tooltip>
@@ -199,11 +205,10 @@ export function ResultRow({
       </dt>
       <dd
         className={cn(
-          "number min-w-0 text-right text-foreground",
+          "min-w-0 text-right tabular-nums text-foreground",
           strong && "font-semibold",
-          valueTone === "up" && "text-semantic-up",
-          (valueTone === "down" || valueTone === "danger") && "text-semantic-down",
-          valueTone === "warning" && "text-semantic-warning",
+          (valueTone === "down" || valueTone === "danger") && "text-destructive",
+          valueTone === "warning" && "text-muted-foreground",
         )}
       >
         {value}
@@ -224,23 +229,12 @@ export function StateMessage({
   tone?: "neutral" | "danger";
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-2xl border px-4 py-5",
-        tone === "danger"
-          ? "border-destructive/20 bg-destructive/5 text-destructive"
-          : "border-border bg-card text-body",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 text-current">
-          {icon ?? <Search className="size-5" aria-hidden="true" />}
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-lg font-medium text-foreground">{title}</h2>
-          <p className="mt-1 text-base">{text}</p>
-        </div>
-      </div>
-    </div>
+    <Alert variant={tone === "danger" ? "destructive" : "default"}>
+      {icon ?? <Search className="size-4" aria-hidden="true" />}
+      <AlertTitle>
+        <h2>{title}</h2>
+      </AlertTitle>
+      <AlertDescription>{text}</AlertDescription>
+    </Alert>
   );
 }
