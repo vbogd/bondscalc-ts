@@ -8,7 +8,7 @@ import { queryClient } from "./queryClient";
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <AppShell>
           <Routes>
             <Route index element={<SearchPage />} />
