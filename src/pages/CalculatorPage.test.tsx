@@ -126,7 +126,9 @@ describe("CalculatorPage", () => {
     expect(screen.getByText("9,67 %")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Формула текущей доходности" }),
-    ).toHaveAccessibleDescription("Купон / цена покупки − налог");
+    ).toHaveAccessibleDescription(
+      "Расчет текущей доходности по формуле:\nКупон / цена покупки − налог",
+    );
     expect(
       screen.getByRole("button", {
         name: "Описание показателя «доходность XIRR, годовая»",

@@ -193,7 +193,7 @@ export function ResultRow({
                   <CircleHelp className="size-[0.85em]" aria-hidden="true" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent sideOffset={8}>
+              <TooltipContent sideOffset={8} className="whitespace-pre-line">
                 {tooltip}
               </TooltipContent>
             </Tooltip>

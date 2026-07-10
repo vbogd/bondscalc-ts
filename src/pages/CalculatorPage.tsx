@@ -90,7 +90,7 @@ type CalculationView = {
 
 const DEFAULT_SELL_PRICE = "100";
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
-const CURRENT_YIELD_TOOLTIP = "Купон / цена покупки − налог";
+const CURRENT_YIELD_TOOLTIP = "Расчет текущей доходности по формуле:\nКупон / цена покупки − налог";
 const XIRR_TOOLTIP =
   "Годовая доходность после налога с учетом дат купонов, амортизаций и погашения.";
 const ANNUALIZED_PROFIT_TOOLTIP =
@@ -402,7 +402,7 @@ export function CalculatorPage() {
                     value={formatLocalDate(data.basicInfo.coupon_date)}
                   />
                   <ResultRow
-                    label="купон"
+                    label="купон (MOEX)"
                     value={formatMoney(data.basicInfo.coupon_value, data.basicInfo.face_unit)}
                   />
                   <ResultRow
