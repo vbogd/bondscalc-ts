@@ -243,6 +243,7 @@ export function CalculatorPage() {
       ]
     : [];
   const hasOffer = Boolean(targetDates?.offerDate);
+  const currentYieldPercent = calculateCurrentYieldFromForm(form);
 
   function handleModeChange(nextMode: CalculatorMode) {
     setMode(nextMode);
@@ -403,6 +404,12 @@ export function CalculatorPage() {
                   <ResultRow
                     label="купон"
                     value={formatMoney(data.basicInfo.coupon_value, data.basicInfo.face_unit)}
+                  />
+                  <ResultRow
+                    label="тек. доходность"
+                    tooltip={CURRENT_YIELD_TOOLTIP}
+                    tooltipLabel="Формула текущей доходности"
+                    value={formatPercent(currentYieldPercent)}
                   />
                   <ResultRow
                     label="оферта"
@@ -722,28 +729,20 @@ function createCalculationView({
 
   return {
     summaryRows: [
-      {
-        label: "доходность XIRR, годовая",
-        value: formatPercent(result.annualizedXirrPercent),
-        tooltip: XIRR_TOOLTIP,
-        strong: true,
-      },
+      ...(mode === "sale"
+        ? []
+        : [
+            {
+              label: "доходность XIRR, годовая",
+              value: formatPercent(result.annualizedXirrPercent),
+              tooltip: XIRR_TOOLTIP,
+              strong: true,
+            },
+          ]),
       {
         label: "совокупная прибыль, годовая",
         value: formatPercent(result.annualizedReturnPercent),
         tooltip: ANNUALIZED_PROFIT_TOOLTIP,
-      },
-      {
-        label: "тек. доходность",
-        tooltip: CURRENT_YIELD_TOOLTIP,
-        tooltipLabel: "Формула текущей доходности",
-        value: formatPercent(
-          calculateCurrentYieldAfterTax({
-            couponPercent,
-            pricePercent: buyPrice,
-            taxPercent,
-          }),
-        ),
       },
       {
         label: "прибыль после налога",
@@ -1115,6 +1114,22 @@ function calculateCurrentYieldAfterTax({
   }
 
   return (couponPercent * (1 - taxPercent / 100) * 100) / pricePercent;
+}
+
+function calculateCurrentYieldFromForm(form: CalculatorForm): number | null {
+  const couponPercent = parseDecimal(form.couponPercent);
+  const buyPrice = parseDecimal(form.buyPrice);
+  const taxPercent = parseDecimal(form.taxPercent);
+
+  if (couponPercent === null || buyPrice === null || taxPercent === null) {
+    return null;
+  }
+
+  return calculateCurrentYieldAfterTax({
+    couponPercent,
+    pricePercent: buyPrice,
+    taxPercent,
+  });
 }
 
 function parseDecimal(value: string): number | null {

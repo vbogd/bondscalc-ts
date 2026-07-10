@@ -152,7 +152,6 @@ describe("CalculatorPage", () => {
     ).toEqual([
       "доходность XIRR, годовая",
       "совокупная прибыль, годовая",
-      "тек. доходность",
       "прибыль после налога",
       "срок, дней",
     ]);
@@ -216,6 +215,24 @@ describe("CalculatorPage", () => {
     expect(screen.getByLabelText("цена продажи, %")).toHaveValue("110");
     expect(screen.getByText("173,37 ₽")).toBeInTheDocument();
     expect(screen.getByText("6 932,56 %")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Описание показателя «доходность XIRR, годовая»",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      Array.from(
+        screen
+          .getByRole("heading", { name: "Результаты" })
+          .closest('[data-slot="card"]')!
+          .querySelectorAll("dt"),
+        (element) => element.firstChild?.textContent,
+      ),
+    ).toEqual([
+      "совокупная прибыль, годовая",
+      "прибыль после налога",
+      "срок, дней",
+    ]);
     expect(screen.getByText("НКД продажи")).toBeInTheDocument();
     expect(screen.queryByText("купоны, оценка")).not.toBeInTheDocument();
   });

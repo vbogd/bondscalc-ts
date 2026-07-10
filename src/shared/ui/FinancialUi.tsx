@@ -187,10 +187,10 @@ export function ResultRow({
                 <button
                   aria-describedby={tooltipId}
                   aria-label={tooltipLabel}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex size-[1.35em] shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   type="button"
                 >
-                  <CircleHelp className="size-4" aria-hidden="true" />
+                  <CircleHelp className="size-[0.85em]" aria-hidden="true" />
                 </button>
               </TooltipTrigger>
               <TooltipContent sideOffset={8}>
