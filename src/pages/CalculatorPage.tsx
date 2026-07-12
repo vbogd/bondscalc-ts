@@ -696,9 +696,6 @@ function createCalculationView({
     buyDate: form.buyDate,
     exitDate: form.sellDate,
     currentNominal: faceValue,
-    annualPercent: couponPercent,
-    fallbackCouponDate: bond.coupon_date,
-    fallbackCouponAmount: bond.coupon_value,
     fallbackCouponPeriodDays: bond.coupon_period,
   });
   const exitAccrualTerms = getExitAccrualTerms({
@@ -819,9 +816,9 @@ function createCalculationView({
       ...result.warnings,
       ...createCashFlowWarnings({
         forecastCouponCount: couponProjection.forecastCount,
+        forecastCouponAnnualPercent: couponProjection.forecastAnnualPercent,
         missingCouponCount: couponProjection.missingCount,
         missingAmortizationCount: amortizationProjection.missingCount,
-        annualPercent: couponPercent,
       }),
     ],
   };
@@ -838,9 +835,6 @@ function createCouponCashFlows({
   buyDate,
   exitDate,
   currentNominal,
-  annualPercent,
-  fallbackCouponDate,
-  fallbackCouponAmount,
   fallbackCouponPeriodDays,
 }: {
   schedule: BondCouponScheduleItem[];
@@ -848,43 +842,38 @@ function createCouponCashFlows({
   buyDate: LocalDate;
   exitDate: LocalDate;
   currentNominal: number;
-  annualPercent: number;
-  fallbackCouponDate: LocalDate;
-  fallbackCouponAmount: number | null;
   fallbackCouponPeriodDays: number;
 }): {
   cashFlows: CashFlow[];
   forecastCount: number;
+  forecastAnnualPercent: number | null;
   missingCount: number;
 } {
-  if (schedule.length === 0) {
-    const fallbackCashFlows = createFallbackCouponCashFlows({
-      buyDate,
-      exitDate,
-      couponDate: fallbackCouponDate,
-      couponAmount: fallbackCouponAmount,
-      couponPeriodDays: fallbackCouponPeriodDays,
-    });
-
-    return {
-      cashFlows: fallbackCashFlows,
-      forecastCount: fallbackCashFlows.length,
-      missingCount: 0,
-    };
-  }
-
   const today = getTodayLocalDate();
   const cashFlows: CashFlow[] = [];
   let forecastCount = 0;
+  let forecastAnnualPercent: number | null = null;
   let missingCount = 0;
+  let lastKnownAnnualPercent: number | null = null;
 
   for (const coupon of schedule) {
-    if (coupon.date <= buyDate || coupon.date > exitDate) {
+    if (coupon.date <= buyDate) {
+      if (coupon.annualPercent !== null) {
+        lastKnownAnnualPercent = coupon.annualPercent;
+      }
+
+      continue;
+    }
+
+    if (coupon.date > exitDate) {
       continue;
     }
 
     if (coupon.amount !== null) {
       cashFlows.push({ date: coupon.date, amount: coupon.amount });
+      if (coupon.annualPercent !== null) {
+        lastKnownAnnualPercent = coupon.annualPercent;
+      }
       continue;
     }
 
@@ -894,7 +883,8 @@ function createCouponCashFlows({
 
     if (
       coupon.date <= today ||
-      annualPercent <= 0 ||
+      lastKnownAnnualPercent === null ||
+      lastKnownAnnualPercent <= 0 ||
       couponPeriodDays === null ||
       couponPeriodDays <= 0
     ) {
@@ -910,44 +900,14 @@ function createCouponCashFlows({
       .reduce((sum, amortization) => sum + amortization.amount, 0);
     const nominalAtCoupon = Math.max(currentNominal - nominalReduction, 0);
     const amount =
-      (nominalAtCoupon * annualPercent * couponPeriodDays) / 36_500;
+      (nominalAtCoupon * lastKnownAnnualPercent * couponPeriodDays) / 365 / 100;
 
     cashFlows.push({ date: coupon.date, amount });
     forecastCount += 1;
+    forecastAnnualPercent = lastKnownAnnualPercent;
   }
 
-  return { cashFlows, forecastCount, missingCount };
-}
-
-function createFallbackCouponCashFlows({
-  buyDate,
-  exitDate,
-  couponDate,
-  couponAmount,
-  couponPeriodDays,
-}: {
-  buyDate: LocalDate;
-  exitDate: LocalDate;
-  couponDate: LocalDate;
-  couponAmount: number | null;
-  couponPeriodDays: number;
-}): CashFlow[] {
-  if (couponAmount === null || couponPeriodDays <= 0) {
-    return [];
-  }
-
-  const coupons: CashFlow[] = [];
-  let nextCouponDate = couponDate;
-
-  while (nextCouponDate <= exitDate && coupons.length < 200) {
-    if (nextCouponDate > buyDate) {
-      coupons.push({ date: nextCouponDate, amount: couponAmount });
-    }
-
-    nextCouponDate = addDays(nextCouponDate, couponPeriodDays);
-  }
-
-  return coupons;
+  return { cashFlows, forecastCount, forecastAnnualPercent, missingCount };
 }
 
 function createAmortizationCashFlows({
@@ -960,7 +920,10 @@ function createAmortizationCashFlows({
   buyDate: LocalDate;
   exitDate: LocalDate;
   currentNominal: number;
-}): { cashFlows: CashFlow[]; missingCount: number } {
+}): {
+  cashFlows: CashFlow[];
+  missingCount: number;
+} {
   const cashFlows: CashFlow[] = [];
   let missingCount = 0;
 
@@ -972,12 +935,11 @@ function createAmortizationCashFlows({
     const amount =
       amortization.amount ??
       (amortization.percent === null
-        ? null
+        ? 0
         : (currentNominal * amortization.percent) / 100);
 
-    if (amount === null) {
+    if (amortization.amount === null && amortization.percent === null) {
       missingCount += 1;
-      continue;
     }
 
     cashFlows.push({ date: amortization.date, amount });
@@ -1013,20 +975,20 @@ function getExitAccrualTerms({
 
 function createCashFlowWarnings({
   forecastCouponCount,
+  forecastCouponAnnualPercent,
   missingCouponCount,
   missingAmortizationCount,
-  annualPercent,
 }: {
   forecastCouponCount: number;
+  forecastCouponAnnualPercent: number | null;
   missingCouponCount: number;
   missingAmortizationCount: number;
-  annualPercent: number;
 }): string[] {
   const warnings: string[] = [];
 
-  if (forecastCouponCount > 0) {
+  if (forecastCouponCount > 0 && forecastCouponAnnualPercent !== null) {
     warnings.push(
-      `Будущие купоны не определены. XIRR рассчитана при сохранении ставки купона ${formatInputNumber(annualPercent)} % годовых. Фактическая доходность может отличаться.`,
+      `Будущие купоны спрогнозированы по ставке последнего известного купона ${formatInputNumber(forecastCouponAnnualPercent)}% годовых. Фактическая доходность может отличаться.`,
     );
   }
 
@@ -1036,7 +998,7 @@ function createCashFlowWarnings({
 
   if (missingAmortizationCount > 0) {
     warnings.push(
-      `Не удалось определить сумму амортизаций: ${missingAmortizationCount}.`,
+      `Не удалось определить сумму амортизаций: ${missingAmortizationCount}. Такие амортизации учтены как 0.`,
     );
   }
 

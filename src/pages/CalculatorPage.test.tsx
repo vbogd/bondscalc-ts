@@ -312,10 +312,18 @@ describe("CalculatorPage", () => {
   });
 
   it("marks unknown future coupons as a forecast", async () => {
-    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBasicBondInfoMock.mockResolvedValue(
+      createBond({ coupon_percent: 20 }),
+    );
     getBondDetailsMock.mockResolvedValue(
       createDetails({
         couponSchedule: [
+          {
+            date: "2026-06-15",
+            startDate: "2025-12-15",
+            amount: 40,
+            annualPercent: 8,
+          },
           {
             date: "2026-12-15",
             startDate: "2026-06-16",
@@ -329,11 +337,32 @@ describe("CalculatorPage", () => {
     renderCalculatorPage();
 
     const warning = await screen.findByText(
-      "Будущие купоны не определены. XIRR рассчитана при сохранении ставки купона 10 % годовых. Фактическая доходность может отличаться.",
+      "Будущие купоны спрогнозированы по ставке последнего известного купона 8% годовых. Фактическая доходность может отличаться.",
     );
 
     expect(warning).toBeInTheDocument();
     expect(warning).toHaveClass("text-muted-foreground");
+  });
+
+  it("counts unknown amortization amounts as zero and warns about it", async () => {
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(
+      createDetails({
+        amortizationSchedule: [
+          { date: "2026-12-15", amount: null, percent: null },
+        ],
+      }),
+    );
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+
+    expect(
+      screen.getByText(
+        "Не удалось определить сумму амортизаций: 1. Такие амортизации учтены как 0.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 
