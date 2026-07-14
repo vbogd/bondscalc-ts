@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Калькулятор облигаций</title>
+  <desc id="desc">Часы со знаком рубля</desc>
+  <g fill="none" stroke="#101820" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="286" r="164" stroke-width="34"/>
+    <path d="M104 126 154 82" stroke-width="34"/>
+    <path d="m358 82 50 44" stroke-width="34"/>
+    <path d="M218 382V196h62c47 0 76 25 76 64 0 40-29 65-76 65h-62" stroke-width="30"/>
+    <path d="M180 325h116" stroke-width="26"/>
+    <path d="M180 365h116" stroke-width="26"/>
+  </g>
+</svg>

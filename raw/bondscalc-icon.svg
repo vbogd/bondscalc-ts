@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Bonds calculator icon</title>
+  <desc id="desc">A clock with a ruble sign, symbolizing that time is money.</desc>
+
+  <g fill="none" stroke="#101820" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Clock -->
+    <circle cx="256" cy="286" r="164" stroke-width="34"/>
+
+    <!-- Minimal alarm accents -->
+    <path d="M104 126 154 82" stroke-width="34"/>
+    <path d="m358 82 50 44" stroke-width="34"/>
+
+    <!-- Geometric ruble sign -->
+    <path d="M218 382V196h62c47 0 76 25 76 64 0 40-29 65-76 65h-62" stroke-width="30"/>
+    <path d="M180 325h116" stroke-width="26"/>
+    <path d="M180 365h116" stroke-width="26"/>
+  </g>
+</svg>
