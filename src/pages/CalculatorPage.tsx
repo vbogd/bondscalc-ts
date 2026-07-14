@@ -91,9 +91,11 @@ type CalculationView = {
 
 const DEFAULT_SELL_PRICE = "100";
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
-const CURRENT_YIELD_TOOLTIP = "Расчет текущей доходности по формуле:\nКупон / цена покупки − налог";
+const CURRENT_YIELD_TOOLTIP = "Текущая доходность по формуле:\nКупон / цена покупки − налог";
+const XIRR_LABEL = "доходность XIRR";
 const XIRR_TOOLTIP =
   "Годовая доходность после налога с учетом дат купонов, амортизаций и погашения.";
+const ANNUALIZED_PROFIT_LABEL = "совокупная прибыль";
 const ANNUALIZED_PROFIT_TOOLTIP =
   "Прибыль после налога относительно затрат, линейно пересчитанная на год.";
 
@@ -311,8 +313,6 @@ export function CalculatorPage() {
       ]
     : [];
   const hasOffer = Boolean(targetDates?.offerDate);
-  const currentYieldPercent = calculateCurrentYieldFromForm(form);
-
   function handleModeChange(nextMode: CalculatorMode) {
     modeRef.current = nextMode;
     setMode(nextMode);
@@ -539,16 +539,13 @@ export function CalculatorPage() {
                     value={formatMoney(data.basicInfo.coupon_value, data.basicInfo.face_unit)}
                   />
                   <ResultRow
-                    label="тек. доходность"
-                    tooltip={CURRENT_YIELD_TOOLTIP}
-                    tooltipLabel="Формула текущей доходности"
-                    value={formatPercent(currentYieldPercent)}
-                  />
-                  <ResultRow
                     label="оферта"
                     value={formatLocalDate(targetDates.offerDate)}
                   />
                 </dl>
+                <p className="mt-3 text-right text-xs text-muted-foreground">
+                  * по данным MOEX
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -803,6 +800,7 @@ function createCalculationView({
   const buyPrice = parseDecimal(form.buyPrice);
   const sellPrice = parseDecimal(form.sellPrice);
   const days = getDaysBetween(form.buyDate, form.sellDate);
+  const currentYieldPercent = calculateCurrentYieldFromForm(form);
 
   if (
     faceValue === null ||
@@ -815,11 +813,13 @@ function createCalculationView({
     !bond ||
     !details
   ) {
-    return createEmptyCalculationView();
+    return createEmptyCalculationView(mode, currentYieldPercent);
   }
 
   if (accruedInterest === null) {
     return createEmptyCalculationView(
+      mode,
+      currentYieldPercent,
       accruedInterestMessage ? [accruedInterestMessage] : [],
     );
   }
@@ -866,21 +866,31 @@ function createCalculationView({
 
   return {
     summaryRows: [
+      {
+        label: "тек. доходность",
+        value: formatPercent(currentYieldPercent),
+        tooltip: CURRENT_YIELD_TOOLTIP,
+        tooltipLabel: "Формула текущей доходности",
+      },
       ...(mode === "sale"
-        ? []
+        ? [
+            {
+              label: ANNUALIZED_PROFIT_LABEL,
+              value: formatPercent(result.annualizedReturnPercent),
+              tooltip: ANNUALIZED_PROFIT_TOOLTIP,
+              strong: true,
+              valueTone: getProfitTone(result.annualizedReturnPercent),
+            },
+          ]
         : [
             {
-              label: "доходность XIRR, годовая",
+              label: XIRR_LABEL,
               value: formatPercent(result.annualizedXirrPercent),
               tooltip: XIRR_TOOLTIP,
               strong: true,
+              valueTone: getProfitTone(result.annualizedXirrPercent),
             },
           ]),
-      {
-        label: "совокупная прибыль, годовая",
-        value: formatPercent(result.annualizedReturnPercent),
-        tooltip: ANNUALIZED_PROFIT_TOOLTIP,
-      },
       {
         label: "прибыль после налога",
         value: formatMoney(result.profitAfterTax, currency),
@@ -1145,26 +1155,36 @@ function createCashFlowWarnings({
   return warnings;
 }
 
-function createEmptyCalculationView(warnings: string[] = []): CalculationView {
+function createEmptyCalculationView(
+  mode: CalculatorMode,
+  currentYieldPercent: number | null,
+  warnings: string[] = [],
+): CalculationView {
   return {
     summaryRows: [
       {
-        label: "доходность XIRR, годовая",
-        value: "—",
-        tooltip: XIRR_TOOLTIP,
-        strong: true,
-      },
-      {
-        label: "совокупная прибыль, годовая",
-        value: "—",
-        tooltip: ANNUALIZED_PROFIT_TOOLTIP,
-      },
-      {
         label: "тек. доходность",
-        value: "—",
+        value: formatPercent(currentYieldPercent),
         tooltip: CURRENT_YIELD_TOOLTIP,
         tooltipLabel: "Формула текущей доходности",
       },
+      ...(mode === "sale"
+        ? [
+            {
+              label: ANNUALIZED_PROFIT_LABEL,
+              value: "—",
+              tooltip: ANNUALIZED_PROFIT_TOOLTIP,
+              strong: true,
+            },
+          ]
+        : [
+            {
+              label: XIRR_LABEL,
+              value: "—",
+              tooltip: XIRR_TOOLTIP,
+              strong: true,
+            },
+          ]),
       { label: "прибыль после налога", value: "—", strong: true },
       { label: "срок, дней", value: "—" },
     ],
@@ -1288,7 +1308,11 @@ function getDisplayPrice(bond: BasicBondInfo): number | null {
   return bond.last_price ?? bond.prev_price;
 }
 
-function getProfitTone(value: number): "neutral" | "up" | "down" {
+function getProfitTone(value: number | null): "neutral" | "up" | "down" {
+  if (value === null) {
+    return "neutral";
+  }
+
   if (value > 0) {
     return "up";
   }

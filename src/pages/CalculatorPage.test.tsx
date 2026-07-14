@@ -121,28 +121,39 @@ describe("CalculatorPage", () => {
     );
     expect(screen.getByLabelText("цена продажи, %")).toHaveValue("99.5");
     expect(screen.getByText("158,52 ₽")).toBeInTheDocument();
-    expect(screen.getByText("17,37 %")).toBeInTheDocument();
     expect(screen.getByText("тек. доходность")).toBeInTheDocument();
     expect(screen.getByText("9,67 %")).toBeInTheDocument();
     expect(
+      Array.from(
+        screen
+          .getByRole("heading", { name: "Тест 001" })
+          .closest('[data-slot="card"]')!
+          .querySelectorAll("dt"),
+        (element) => element.firstChild?.textContent,
+      ),
+    ).toEqual(["погашение", "ближайший купон", "купон (MOEX)", "оферта"]);
+    expect(screen.getByText("* по данным MOEX")).toHaveClass(
+      "text-right",
+      "text-xs",
+      "text-muted-foreground",
+    );
+    expect(
       screen.getByRole("button", { name: "Формула текущей доходности" }),
     ).toHaveAccessibleDescription(
-      "Расчет текущей доходности по формуле:\nКупон / цена покупки − налог",
+      "Текущая доходность по формуле:\nКупон / цена покупки − налог",
     );
     expect(
       screen.getByRole("button", {
-        name: "Описание показателя «доходность XIRR, годовая»",
+        name: "Описание показателя «доходность XIRR»",
       }),
     ).toHaveAccessibleDescription(
       "Годовая доходность после налога с учетом дат купонов, амортизаций и погашения.",
     );
     expect(
-      screen.getByRole("button", {
-        name: "Описание показателя «совокупная прибыль, годовая»",
+      screen.queryByRole("button", {
+        name: "Описание показателя «совокупная прибыль»",
       }),
-    ).toHaveAccessibleDescription(
-      "Прибыль после налога относительно затрат, линейно пересчитанная на год.",
-    );
+    ).not.toBeInTheDocument();
     expect(
       Array.from(
         screen
@@ -152,8 +163,8 @@ describe("CalculatorPage", () => {
         (element) => element.firstChild?.textContent,
       ),
     ).toEqual([
-      "доходность XIRR, годовая",
-      "совокупная прибыль, годовая",
+      "тек. доходность",
+      "доходность XIRR",
       "прибыль после налога",
       "срок, дней",
     ]);
@@ -193,12 +204,28 @@ describe("CalculatorPage", () => {
     renderCalculatorPage();
 
     expect(await screen.findByRole("heading", { name: "Тест 001" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Погашение" })).toHaveAttribute(
-      "data-state",
-      "on",
-    );
+    await waitFor(() => {
+      expect(screen.getByRole("radio", { name: "Погашение" })).toHaveAttribute(
+        "data-state",
+        "on",
+      );
+    });
     expect(screen.getByRole("radio", { name: "Оферта" })).toBeDisabled();
     expect(screen.getByLabelText("дата продажи")).toHaveValue("2030-06-15");
+    expect(
+      Array.from(
+        screen
+          .getByRole("heading", { name: "Результаты" })
+          .closest('[data-slot="card"]')!
+          .querySelectorAll("dt"),
+        (element) => element.firstChild?.textContent,
+      ),
+    ).toEqual([
+      "тек. доходность",
+      "доходность XIRR",
+      "прибыль после налога",
+      "срок, дней",
+    ]);
   });
 
   it("switches to sale mode and recalculates after field changes", async () => {
@@ -216,10 +243,10 @@ describe("CalculatorPage", () => {
     expect(screen.getByLabelText("дата продажи")).toHaveValue("2026-06-16");
     expect(screen.getByLabelText("цена продажи, %")).toHaveValue("110");
     expect(screen.getByText("173,37 ₽")).toBeInTheDocument();
-    expect(screen.getByText("6 932,56 %")).toBeInTheDocument();
+    expect(screen.getByText("6 932,56 %")).toHaveClass("font-semibold");
     expect(
       screen.queryByRole("button", {
-        name: "Описание показателя «доходность XIRR, годовая»",
+        name: "Описание показателя «доходность XIRR»",
       }),
     ).not.toBeInTheDocument();
     expect(
@@ -231,7 +258,8 @@ describe("CalculatorPage", () => {
         (element) => element.firstChild?.textContent,
       ),
     ).toEqual([
-      "совокупная прибыль, годовая",
+      "тек. доходность",
+      "совокупная прибыль",
       "прибыль после налога",
       "срок, дней",
     ]);
@@ -394,10 +422,12 @@ describe("CalculatorPage", () => {
       });
     });
 
-    expect(screen.getByRole("radio", { name: "Погашение" })).toHaveAttribute(
-      "data-state",
-      "on",
-    );
+    await waitFor(() => {
+      expect(screen.getByRole("radio", { name: "Погашение" })).toHaveAttribute(
+        "data-state",
+        "on",
+      );
+    });
     expect(screen.getByText("Оферта больше не доступна")).toBeInTheDocument();
   });
 
