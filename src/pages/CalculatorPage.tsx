@@ -6,6 +6,7 @@ import {
   Copy,
   ExternalLink,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -107,8 +108,21 @@ export function CalculatorPage() {
   const normalizedSecid = secid.trim().toUpperCase();
   const [mode, setMode] = useState<CalculatorMode>("maturity");
   const [form, setForm] = useState<CalculatorForm>(() => createDefaultForm());
+  const [editedFields, setEditedFields] = useState<Set<keyof CalculatorForm>>(
+    () => new Set(),
+  );
+  const [hasPendingMoexUpdate, setHasPendingMoexUpdate] = useState(false);
+  const [showOfferUnavailableAlert, setShowOfferUnavailableAlert] = useState(false);
   const [copiedIsin, setCopiedIsin] = useState(false);
   const copyResetTimerRef = useRef<number | null>(null);
+  const offerUnavailableTimerRef = useRef<number | null>(null);
+  const initializedSecidRef = useRef<string | null>(null);
+  const modeRef = useRef<CalculatorMode>("maturity");
+  const processedDataRef = useRef<{
+    basicInfo: BasicBondInfo;
+    details: BondDetails;
+  } | null>(null);
+  const isFormDirty = editedFields.size > 0;
 
   useEffect(() => {
     saveCalculatorPreferences({
@@ -122,10 +136,14 @@ export function CalculatorPage() {
       if (copyResetTimerRef.current !== null) {
         window.clearTimeout(copyResetTimerRef.current);
       }
+
+      if (offerUnavailableTimerRef.current !== null) {
+        window.clearTimeout(offerUnavailableTimerRef.current);
+      }
     };
   }, []);
 
-  const { data, error, isError, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ["bond-calculator", normalizedSecid],
     queryFn: async () => {
       const [basicInfo, details] = await Promise.all([
@@ -168,16 +186,59 @@ export function CalculatorPage() {
       return;
     }
 
-    const initialMode = targetDates.offerDate ? "offer" : "maturity";
+    const isNewBond = initializedSecidRef.current !== normalizedSecid;
+    const hasNewData = processedDataRef.current !== data;
 
-    setMode(initialMode);
-    setForm((currentForm) =>
-      createFormFromBond(data.basicInfo, targetDates, initialMode, {
-        commissionPercent: currentForm.commissionPercent,
-        taxPercent: currentForm.taxPercent,
-      }),
-    );
-  }, [data, targetDates]);
+    if (!isNewBond && !hasNewData) {
+      return;
+    }
+
+    initializedSecidRef.current = normalizedSecid;
+    processedDataRef.current = data;
+
+    const initialMode = targetDates.offerDate ? "offer" : "maturity";
+    const offerWasRemoved =
+      !isNewBond && modeRef.current === "offer" && !targetDates.offerDate;
+    const nextMode = isNewBond ? initialMode : offerWasRemoved ? "maturity" : modeRef.current;
+    const shouldApplyMoexValues = isNewBond || !isFormDirty;
+
+    if (offerWasRemoved) {
+      modeRef.current = "maturity";
+      setMode("maturity");
+      setShowOfferUnavailableAlert(true);
+
+      if (offerUnavailableTimerRef.current !== null) {
+        window.clearTimeout(offerUnavailableTimerRef.current);
+      }
+
+      offerUnavailableTimerRef.current = window.setTimeout(() => {
+        setShowOfferUnavailableAlert(false);
+        offerUnavailableTimerRef.current = null;
+      }, 1_000);
+    }
+
+    if (shouldApplyMoexValues) {
+      modeRef.current = nextMode;
+      setMode(nextMode);
+      setForm((currentForm) =>
+        createFormFromBond(data.basicInfo, targetDates, nextMode, {
+          commissionPercent: currentForm.commissionPercent,
+          taxPercent: currentForm.taxPercent,
+        }),
+      );
+      setEditedFields(new Set());
+      setHasPendingMoexUpdate(false);
+    } else if (offerWasRemoved) {
+      setForm((currentForm) => ({
+        ...currentForm,
+        sellDate: getModeDate("maturity", targetDates, currentForm.sellDate),
+        sellPrice: getModePrice("maturity", targetDates),
+      }));
+      setHasPendingMoexUpdate(true);
+    } else {
+      setHasPendingMoexUpdate(true);
+    }
+  }, [data, isFormDirty, normalizedSecid, targetDates]);
 
   useEffect(() => {
     const faceValue = historicalBuyDate
@@ -188,11 +249,18 @@ export function CalculatorPage() {
       return;
     }
 
-    setForm((currentForm) => ({
-      ...currentForm,
-      faceValue: formatInputNumber(faceValue),
-    }));
-  }, [data?.basicInfo.face_value, historicalBuyDate, historicalSnapshotQuery.data]);
+    if (!editedFields.has("faceValue")) {
+      setForm((currentForm) => ({
+        ...currentForm,
+        faceValue: formatInputNumber(faceValue),
+      }));
+    }
+  }, [
+    data?.basicInfo.face_value,
+    editedFields,
+    historicalBuyDate,
+    historicalSnapshotQuery.data,
+  ]);
 
   const calculationView = useMemo(
     () =>
@@ -246,6 +314,7 @@ export function CalculatorPage() {
   const currentYieldPercent = calculateCurrentYieldFromForm(form);
 
   function handleModeChange(nextMode: CalculatorMode) {
+    modeRef.current = nextMode;
     setMode(nextMode);
 
     if (!data || !targetDates) {
@@ -266,10 +335,53 @@ export function CalculatorPage() {
   }
 
   function updateField(field: keyof CalculatorForm, value: string) {
+    setEditedFields((currentFields) => new Set(currentFields).add(field));
     setForm((currentForm) => ({
       ...currentForm,
       [field]: value,
     }));
+  }
+
+  async function handleManualMoexRefresh() {
+    const result = await refetch();
+
+    if (!result.data || result.isError) {
+      return;
+    }
+
+    const freshTargetDates = getTargetDates(
+      result.data.basicInfo,
+      result.data.details,
+    );
+    const offerWasRemoved =
+      modeRef.current === "offer" && !freshTargetDates.offerDate;
+    const nextMode = offerWasRemoved ? "maturity" : modeRef.current;
+
+    if (offerWasRemoved) {
+      setShowOfferUnavailableAlert(true);
+
+      if (offerUnavailableTimerRef.current !== null) {
+        window.clearTimeout(offerUnavailableTimerRef.current);
+      }
+
+      offerUnavailableTimerRef.current = window.setTimeout(() => {
+        setShowOfferUnavailableAlert(false);
+        offerUnavailableTimerRef.current = null;
+      }, 1_000);
+    }
+
+    initializedSecidRef.current = normalizedSecid;
+    processedDataRef.current = result.data;
+    modeRef.current = nextMode;
+    setMode(nextMode);
+    setForm((currentForm) =>
+      createFormFromBond(result.data.basicInfo, freshTargetDates, nextMode, {
+        commissionPercent: currentForm.commissionPercent,
+        taxPercent: currentForm.taxPercent,
+      }),
+    );
+    setEditedFields(new Set());
+    setHasPendingMoexUpdate(false);
   }
 
   async function handleCopyIsin(isin: string) {
@@ -325,35 +437,56 @@ export function CalculatorPage() {
                   <ArrowLeft className="size-5" aria-hidden="true" />
                 </Link>
               </Button>
-              {externalLinks.length > 0 ? (
-                <DropdownMenu modal={false}>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 text-muted-foreground hover:text-foreground [&_svg]:size-6"
-                      aria-label="Внешние ссылки"
-                    >
-                      <ExternalLink className="size-5" aria-hidden="true" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44 max-w-[calc(100vw-2rem)]">
-                    {externalLinks.map((externalLink) => (
-                      <DropdownMenuItem asChild key={externalLink.href}>
-                        <a
-                          className="cursor-pointer gap-3 text-sm font-medium text-foreground"
-                          href={externalLink.href}
-                          target="_blank"
-                          rel="noreferrer"
+              <div className="flex shrink-0 items-center gap-1">
+                {isFormDirty && hasPendingMoexUpdate ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-foreground [&_svg]:size-6"
+                          onClick={() => void handleManualMoexRefresh()}
+                          type="button"
+                          aria-label="Обновить значения из MOEX"
                         >
-                          {externalLink.icon}
-                          <span>{externalLink.label}</span>
-                        </a>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : null}
+                          <RefreshCw className="size-5" aria-hidden="true" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Обновить значения из MOEX</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : null}
+                {externalLinks.length > 0 ? (
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-foreground [&_svg]:size-6"
+                        aria-label="Внешние ссылки"
+                      >
+                        <ExternalLink className="size-5" aria-hidden="true" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44 max-w-[calc(100vw-2rem)]">
+                      {externalLinks.map((externalLink) => (
+                        <DropdownMenuItem asChild key={externalLink.href}>
+                          <a
+                            className="cursor-pointer gap-3 text-sm font-medium text-foreground"
+                            href={externalLink.href}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {externalLink.icon}
+                            <span>{externalLink.label}</span>
+                          </a>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
+              </div>
             </header>
             <Card>
               <CardHeader>
@@ -474,6 +607,13 @@ export function CalculatorPage() {
                 value: modeKey,
               }))}
             />
+            {showOfferUnavailableAlert ? (
+              <StateMessage
+                title="Оферта больше не доступна"
+                text="Переключили расчёт на погашение."
+                tone="danger"
+              />
+            ) : null}
             <FieldGroup className="grid-cols-2 gap-4">
               <InputField
                 label="дата продажи"

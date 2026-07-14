@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -311,6 +311,96 @@ describe("CalculatorPage", () => {
     });
   });
 
+  it("keeps edited inputs and the selected mode after a background MOEX update", async () => {
+    const user = userEvent.setup();
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    const { queryClient } = renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    await user.click(screen.getByRole("radio", { name: "Продажа" }));
+    fireEvent.change(screen.getByLabelText("цена, %"), {
+      target: { value: "95" },
+    });
+    getBasicBondInfoMock.mockResolvedValue(createBond({ last_price: 80 }));
+
+    await act(async () => {
+      await queryClient.refetchQueries({
+        queryKey: ["bond-calculator", "RU000A_TEST"],
+      });
+    });
+
+    expect(screen.getByLabelText("цена, %")).toHaveValue("95");
+    expect(screen.getByRole("radio", { name: "Продажа" })).toHaveAttribute(
+      "data-state",
+      "on",
+    );
+    expect(
+      await screen.findByRole("button", { name: "Обновить значения из MOEX" }),
+    ).toBeInTheDocument();
+  });
+
+  it("refreshes MOEX values explicitly while preserving the selected mode", async () => {
+    const user = userEvent.setup();
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    const { queryClient } = renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    await user.click(screen.getByRole("radio", { name: "Продажа" }));
+    fireEvent.change(screen.getByLabelText("цена, %"), {
+      target: { value: "95" },
+    });
+    getBasicBondInfoMock.mockResolvedValue(createBond({ last_price: 80 }));
+
+    await act(async () => {
+      await queryClient.refetchQueries({
+        queryKey: ["bond-calculator", "RU000A_TEST"],
+      });
+    });
+    await user.click(
+      await screen.findByRole("button", { name: "Обновить значения из MOEX" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("цена, %")).toHaveValue("80");
+    });
+    expect(screen.getByRole("radio", { name: "Продажа" })).toHaveAttribute(
+      "data-state",
+      "on",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Обновить значения из MOEX" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switches to maturity and briefly explains when an offer disappears", async () => {
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    const { queryClient } = renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    getBasicBondInfoMock.mockResolvedValue(createBond({ offer_date: null }));
+    getBondDetailsMock.mockResolvedValue(
+      createDetails({ nextOfferDate: null, offerSchedule: [] }),
+    );
+
+    await act(async () => {
+      await queryClient.refetchQueries({
+        queryKey: ["bond-calculator", "RU000A_TEST"],
+      });
+    });
+
+    expect(screen.getByRole("radio", { name: "Погашение" })).toHaveAttribute(
+      "data-state",
+      "on",
+    );
+    expect(screen.getByText("Оферта больше не доступна")).toBeInTheDocument();
+  });
+
   it("marks unknown future coupons as a forecast", async () => {
     getBasicBondInfoMock.mockResolvedValue(
       createBond({ coupon_percent: 20 }),
@@ -375,7 +465,7 @@ function renderCalculatorPage() {
     },
   });
 
-  return render(
+  const renderResult = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/bond/RU000A_TEST"]}>
         <Routes>
@@ -384,6 +474,8 @@ function renderCalculatorPage() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+
+  return { ...renderResult, queryClient };
 }
 
 function createBond(overrides: Partial<BasicBondInfo> = {}): BasicBondInfo {
