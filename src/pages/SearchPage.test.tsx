@@ -55,6 +55,22 @@ describe("SearchPage", () => {
     expect(screen.getByText("Введите минимум 3 символа")).toBeInTheDocument();
   });
 
+  it("does not search for a glob pattern with fewer than three ordinary symbols", async () => {
+    const user = userEvent.setup();
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "???");
+
+    expect(searchBasicBondInfoMock).not.toHaveBeenCalled();
+    expect(screen.getByText("В glob-паттерне нужны 3 обычных символа")).toBeInTheDocument();
+  });
+
+  it("shows instructions for substring and glob searches", () => {
+    renderSearchPage();
+
+    expect(screen.getByRole("button", { name: "Как пользоваться поиском" })).toBeInTheDocument();
+  });
+
   it("shows search results and an offer badge", async () => {
     const user = userEvent.setup();
     searchBasicBondInfoMock.mockResolvedValue([

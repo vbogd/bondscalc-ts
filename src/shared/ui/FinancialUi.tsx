@@ -24,11 +24,13 @@ type Tone = "neutral" | "danger" | "up" | "down" | "warning";
 
 export function SearchInput({
   label = "Поиск",
+  maxLength,
   onChange,
   placeholder,
   value,
 }: {
   label?: string;
+  maxLength?: number;
   onChange: (value: string) => void;
   placeholder: string;
   value: string;
@@ -42,6 +44,7 @@ export function SearchInput({
       />
       <Input
         className="h-11 pl-9 text-base"
+        maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type="search"

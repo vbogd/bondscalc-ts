@@ -1,4 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import wildcardMatch from "wildcard-match";
+
+vi.mock("wildcard-match", async (importOriginal) => {
+  const actual = (await importOriginal()) as {
+    default: typeof wildcardMatch;
+  };
+
+  return { default: vi.fn(actual.default) };
+});
+
+const wildcardMatchMock = vi.mocked(wildcardMatch);
 
 type FetchResponse = {
   ok: true;
@@ -7,6 +18,7 @@ type FetchResponse = {
 
 describe("MOEX ISS client", () => {
   afterEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.resetModules();
@@ -35,6 +47,95 @@ describe("MOEX ISS client", () => {
     const results = await searchBasicBondInfo("SU26240");
 
     expect(results.map((bond) => bond.secid)).toEqual(["SU26240RMFS0"]);
+  });
+
+  it("keeps case-insensitive substring search for regular text", async () => {
+    mockSnapshotFetch();
+    const { searchBasicBondInfo } = await import("./client");
+
+    await expect(searchBasicBondInfo("ржд")).resolves.toEqual([
+      expect.objectContaining({ secid: "RU000A106A86" }),
+    ]);
+  });
+
+  it("matches a glob pattern against a substring of the SECID", async () => {
+    mockSnapshotFetch();
+    const { searchBasicBondInfo } = await import("./client");
+
+    await expect(searchBasicBondInfo("SU262*")).resolves.toEqual([
+      expect.objectContaining({ secid: "SU26233RMFS5" }),
+      expect.objectContaining({ secid: "SU26240RMFS0" }),
+    ]);
+    await expect(searchBasicBondInfo("262*")).resolves.toEqual([
+      expect.objectContaining({ secid: "SU26233RMFS5" }),
+      expect.objectContaining({ secid: "SU26240RMFS0" }),
+    ]);
+  });
+
+  it("matches glob patterns by short name without regard to case", async () => {
+    mockSnapshotFetch();
+    const { searchBasicBondInfo } = await import("./client");
+
+    await expect(searchBasicBondInfo("*ржд*")).resolves.toEqual([
+      expect.objectContaining({ secid: "RU000A106A86" }),
+    ]);
+  });
+
+  it("matches a glob pattern that starts with a wildcard as a substring", async () => {
+    mockSnapshotFetch();
+    const { searchBasicBondInfo } = await import("./client");
+
+    await expect(searchBasicBondInfo("*сек")).resolves.toEqual([
+      expect.objectContaining({ secid: "TESTWILDCARDS" }),
+    ]);
+  });
+
+  it("matches one character for each question mark", async () => {
+    mockSnapshotFetch();
+    const { searchBasicBondInfo } = await import("./client");
+
+    await expect(searchBasicBondInfo("RU000A106A8?")).resolves.toEqual([
+      expect.objectContaining({ secid: "RU000A106A86" }),
+    ]);
+    await expect(searchBasicBondInfo("RU000A106A???")).resolves.toEqual([]);
+  });
+
+  it("treats escaped wildcard symbols as literal characters", async () => {
+    mockSnapshotFetch();
+    const { searchBasicBondInfo } = await import("./client");
+
+    await expect(searchBasicBondInfo("*Тест секция \\*\\?*")).resolves.toEqual([
+      expect.objectContaining({ secid: "TESTWILDCARDS" }),
+    ]);
+  });
+
+  it("allows wildcards to match slashes", async () => {
+    mockSnapshotFetch();
+    const { searchBasicBondInfo } = await import("./client");
+
+    await expect(searchBasicBondInfo("*Тест путь*")).resolves.toEqual([
+      expect.objectContaining({ secid: "TESTSLASH" }),
+    ]);
+  });
+
+  it("does not load the snapshot for underspecified or invalid glob patterns", async () => {
+    const fetchMock = mockSnapshotFetch();
+    const { searchBasicBondInfo } = await import("./client");
+
+    await expect(searchBasicBondInfo("???")).resolves.toEqual([]);
+    await expect(searchBasicBondInfo("SU\\")).resolves.toEqual([]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("compiles a glob matcher once per search query", async () => {
+    mockSnapshotFetch();
+    const { searchBasicBondInfo } = await import("./client");
+
+    await searchBasicBondInfo("SU262*");
+
+    expect(wildcardMatchMock).toHaveBeenCalledTimes(1);
+    expect(wildcardMatchMock).toHaveBeenCalledWith("*SU262**", { separator: false });
   });
 
   it("searches by ISIN but not registration number", async () => {
@@ -204,6 +305,46 @@ function createSnapshotResponse() {
           8.5,
           "2028-03-05",
         ],
+        [
+          "TESTWILDCARDS",
+          "TQOB",
+          "Тест секция *?",
+          0,
+          "2026-07-20",
+          0,
+          100,
+          1000,
+          "2030-01-01",
+          365,
+          1000,
+          "SUR",
+          "RU000TESTSTAR",
+          "TESTWILDCARDS",
+          "SUR",
+          1,
+          0,
+          null,
+        ],
+        [
+          "TESTSLASH",
+          "TQOB",
+          "Тест путь/ещё",
+          0,
+          "2026-07-20",
+          0,
+          100,
+          1000,
+          "2030-01-01",
+          365,
+          1000,
+          "SUR",
+          "RU000TESTSLASH",
+          "TESTSLASH",
+          "SUR",
+          1,
+          0,
+          null,
+        ],
       ],
     },
     marketdata: {
@@ -212,6 +353,8 @@ function createSnapshotResponse() {
         ["TQOB", "SU26233RMFS5", 59.538],
         ["TQOB", "SU26240RMFS0", 81.7],
         ["TQCB", "RU000A106A86", 94.12],
+        ["TQOB", "TESTWILDCARDS", 100],
+        ["TQOB", "TESTSLASH", 100],
       ],
     },
   };

@@ -1,26 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, CircleHelp, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  MIN_BOND_SEARCH_QUERY_LENGTH,
+  isBondSearchQueryValid,
+  MAX_BOND_SEARCH_QUERY_LENGTH,
   searchBasicBondInfo,
 } from "../shared/api/moex";
 import type { BasicBondInfo, LocalDate } from "../shared/api/moex";
 import { loadSearchQuery, saveSearchQuery } from "../shared/persistence";
 import { BondBadge, SearchInput, StateMessage } from "../shared/ui/FinancialUi";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const BOND_SEARCH_DEBOUNCE_MS = 200;
 
 export function SearchPage() {
   const [query, setQuery] = useState(loadSearchQuery);
   const normalizedQuery = query.trim();
+  const hasGlobSyntax = /[*?\\]/.test(normalizedQuery);
   const debouncedQuery = useDebouncedValue(
     normalizedQuery,
     BOND_SEARCH_DEBOUNCE_MS,
   );
-  const canSearch = normalizedQuery.length >= MIN_BOND_SEARCH_QUERY_LENGTH;
-  const canRunSearch = canSearch && debouncedQuery.length >= MIN_BOND_SEARCH_QUERY_LENGTH;
+  const canSearch = isBondSearchQueryValid(normalizedQuery);
+  const canRunSearch = canSearch && isBondSearchQueryValid(debouncedQuery);
   const isDebouncing = canSearch && normalizedQuery !== debouncedQuery;
   const {
     data: bonds = [],
@@ -44,12 +53,16 @@ export function SearchPage() {
     <section className="space-y-6">
       <header className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">MOEX bonds</p>
-        <h1 className="text-3xl font-medium tracking-normal text-foreground">
-          Поиск облигаций
-        </h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-medium tracking-normal text-foreground">
+            Поиск облигаций
+          </h1>
+          <SearchHelpTooltip />
+        </div>
       </header>
 
       <SearchInput
+        maxLength={MAX_BOND_SEARCH_QUERY_LENGTH}
         onChange={setQuery}
         placeholder="26233 или RU000A101F94"
         value={query}
@@ -57,8 +70,16 @@ export function SearchPage() {
 
       {!canSearch ? (
         <StateMessage
-          title="Введите минимум 3 символа"
-          text="Можно искать по SECID, ISIN или части названия облигации."
+          title={
+            hasGlobSyntax
+              ? "В glob-паттерне нужны 3 обычных символа"
+              : "Введите минимум 3 символа"
+          }
+          text={
+            hasGlobSyntax
+              ? "Символы *, ? и \\ не считаются. Обратная косая черта экранирует только *, ? или \\."
+              : "Можно искать по SECID, ISIN или части названия облигации."
+          }
         />
       ) : isDebouncing || isFetching ? (
         <StateMessage
@@ -86,6 +107,29 @@ export function SearchPage() {
         </div>
       )}
     </section>
+  );
+}
+
+function SearchHelpTooltip() {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 text-muted-foreground hover:text-foreground [&_svg]:size-6"
+            type="button"
+            aria-label="Как пользоваться поиском"
+          >
+            <CircleHelp aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent sideOffset={8} className="whitespace-pre-line">
+          {"Поиск осуществляется по подстроке в полях: SECID, ISIN или название.\nПример: 26233\n\nТакже поддерживается glob-паттерн. Специальные символы:\n* — любое число символов\n? — ровно один символ\n\\* и \\? — обычные * и ?\nВ паттерне нужно минимум 3 обычных символа.\nПример: гтлк*06"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

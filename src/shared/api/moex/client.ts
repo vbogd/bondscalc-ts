@@ -1,3 +1,4 @@
+import wildcardMatch from "wildcard-match";
 import {
   MIN_BOND_SEARCH_QUERY_LENGTH,
   normalizeBasicBondInfoResponse,
@@ -9,6 +10,7 @@ import type { BasicBondInfo, BondDetails, HistoricalBondSnapshot, LocalDate } fr
 
 const MOEX_ISS_BASE_URL = "https://iss.moex.com/iss";
 const DEFAULT_SEARCH_LIMIT = 100;
+const MAX_BOND_SEARCH_QUERY_LENGTH = 100;
 const PRIMARY_BOND_SNAPSHOT_TTL_MS = 60_000;
 const PRIMARY_BOND_SECURITY_COLUMNS = [
   "SECID",
@@ -45,12 +47,25 @@ export async function searchBasicBondInfo(
 ): Promise<BasicBondInfo[]> {
   const normalizedQuery = query.trim();
 
-  if (normalizedQuery.length < MIN_BOND_SEARCH_QUERY_LENGTH) {
+  if (!isBondSearchQueryValid(normalizedQuery)) {
     return [];
   }
 
   return searchPrimaryBondSnapshot(await getPrimaryBondSnapshot(), normalizedQuery, limit);
 }
+
+export function isBondSearchQueryValid(query: string): boolean {
+  const normalizedQuery = query.trim();
+  const pattern = parseGlobPattern(normalizedQuery);
+
+  return (
+    normalizedQuery.length <= MAX_BOND_SEARCH_QUERY_LENGTH &&
+    pattern !== null &&
+    pattern.ordinaryCharacterCount >= MIN_BOND_SEARCH_QUERY_LENGTH
+  );
+}
+
+export { MAX_BOND_SEARCH_QUERY_LENGTH };
 
 export async function getBasicBondInfo({
   secid,
@@ -199,29 +214,91 @@ function searchPrimaryBondSnapshot(
   query: string,
   limit: number,
 ): BasicBondInfo[] {
-  const normalizedQuery = normalizeSearchValue(query);
+  const searchQuery = getBondSearchQuery(query);
+
+  if (!searchQuery) {
+    return [];
+  }
 
   return bonds
-    .filter((bond) => matchesPrimaryBondSearch(bond, normalizedQuery))
+    .filter((bond) => matchesPrimaryBondSearch(bond, searchQuery))
     .sort((left, right) => left.shortname.localeCompare(right.shortname, "ru"))
     .slice(0, limit);
 }
 
 function matchesPrimaryBondSearch(
   bond: BasicBondInfo,
-  normalizedQuery: string,
+  query: BondSearchQuery,
 ): boolean {
   const secid = normalizeSearchValue(bond.secid);
   const isin = normalizeSearchValue(bond.isin);
   const shortname = normalizeSearchValue(bond.shortname);
 
-  return (
-    secid.includes(normalizedQuery) ||
-    isin.includes(normalizedQuery) ||
-    shortname.includes(normalizedQuery)
-  );
+  return query.matches(secid) || query.matches(isin) || query.matches(shortname);
 }
 
 function normalizeSearchValue(value: string): string {
   return value.trim().toLocaleUpperCase("ru-RU");
+}
+
+type BondSearchQuery = {
+  matches: (value: string) => boolean;
+};
+
+function getBondSearchQuery(query: string): BondSearchQuery | null {
+  const pattern = parseGlobPattern(query);
+
+  if (!pattern || pattern.ordinaryCharacterCount < MIN_BOND_SEARCH_QUERY_LENGTH) {
+    return null;
+  }
+
+  const normalizedPattern = normalizeSearchValue(query);
+
+  if (!pattern.hasGlobSyntax) {
+    return {
+      matches: (value) => value.includes(normalizedPattern),
+    };
+  }
+
+  const matches = wildcardMatch(`*${normalizedPattern}*`, { separator: false });
+
+  return { matches };
+}
+
+function parseGlobPattern(pattern: string): {
+  hasGlobSyntax: boolean;
+  ordinaryCharacterCount: number;
+} | null {
+  let hasGlobSyntax = false;
+  let ordinaryCharacterCount = 0;
+
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+
+    if (character === "*" || character === "?") {
+      hasGlobSyntax = true;
+      continue;
+    }
+
+    if (character === "\\") {
+      hasGlobSyntax = true;
+      const escapedCharacter = pattern[index + 1];
+
+      if (
+        escapedCharacter !== "*" &&
+        escapedCharacter !== "?" &&
+        escapedCharacter !== "\\"
+      ) {
+        return null;
+      }
+
+      ordinaryCharacterCount += 1;
+      index += 1;
+      continue;
+    }
+
+    ordinaryCharacterCount += 1;
+  }
+
+  return { hasGlobSyntax, ordinaryCharacterCount };
 }
