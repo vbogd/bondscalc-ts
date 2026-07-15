@@ -95,7 +95,7 @@ const CURRENT_YIELD_TOOLTIP = "Текущая доходность по форм
 const XIRR_LABEL = "доходность XIRR";
 const XIRR_TOOLTIP =
   "Годовая доходность после налога с учетом дат купонов, амортизаций и погашения.";
-const ANNUALIZED_PROFIT_LABEL = "совокупная прибыль";
+const ANNUALIZED_PROFIT_LABEL = "доходность, год";
 const ANNUALIZED_PROFIT_TOOLTIP =
   "Прибыль после налога относительно затрат, линейно пересчитанная на год.";
 
@@ -892,7 +892,7 @@ function createCalculationView({
             },
           ]),
       {
-        label: "прибыль после налога",
+        label: "прибыль",
         value: formatMoney(result.profitAfterTax, currency),
         strong: true,
         valueTone: getProfitTone(result.profitAfterTax),
@@ -1185,7 +1185,7 @@ function createEmptyCalculationView(
               strong: true,
             },
           ]),
-      { label: "прибыль после налога", value: "—", strong: true },
+      { label: "прибыль", value: "—", strong: true },
       { label: "срок, дней", value: "—" },
     ],
     detailSections: [

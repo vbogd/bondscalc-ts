@@ -165,7 +165,7 @@ describe("CalculatorPage", () => {
     ).toEqual([
       "тек. доходность",
       "доходность XIRR",
-      "прибыль после налога",
+      "прибыль",
       "срок, дней",
     ]);
     expect(screen.getByText("НКД покупки")).toBeInTheDocument();
@@ -223,7 +223,7 @@ describe("CalculatorPage", () => {
     ).toEqual([
       "тек. доходность",
       "доходность XIRR",
-      "прибыль после налога",
+      "прибыль",
       "срок, дней",
     ]);
   });
@@ -259,8 +259,8 @@ describe("CalculatorPage", () => {
       ),
     ).toEqual([
       "тек. доходность",
-      "совокупная прибыль",
-      "прибыль после налога",
+      "доходность, год",
+      "прибыль",
       "срок, дней",
     ]);
     expect(screen.getByText("НКД продажи")).toBeInTheDocument();
