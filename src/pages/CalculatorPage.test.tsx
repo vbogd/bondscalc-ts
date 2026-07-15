@@ -79,6 +79,63 @@ describe("CalculatorPage", () => {
     });
   });
 
+  it("temporarily excludes tax and commission without overwriting their values", async () => {
+    const user = userEvent.setup();
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    const resultsCard = screen
+      .getByRole("heading", { name: "Результаты" })
+      .closest('[data-slot="card"]')!;
+    const detailsCard = screen
+      .getByRole("heading", { name: "Детализация" })
+      .closest('[data-slot="card"]')!;
+    const initialProfit = getDefinitionValue(resultsCard, "прибыль");
+    const initialCommission = getDefinitionValue(detailsCard, "комиссия");
+    const taxToggle = screen.getByRole("button", { name: "Налог" });
+    const commissionToggle = screen.getByRole("button", { name: "Комиссия" });
+    const toggleGroup = screen.getByRole("toolbar", {
+      name: "Учет налога и комиссии",
+    });
+
+    expect(taxToggle).toHaveAttribute("aria-pressed", "false");
+    expect(commissionToggle).toHaveAttribute("aria-pressed", "false");
+    expect(taxToggle).toHaveClass("h-9");
+    expect(commissionToggle).toHaveClass("h-9");
+    expect(taxToggle).toHaveClass("border", "bg-transparent");
+    expect(commissionToggle).toHaveClass("border", "bg-transparent");
+    expect(
+      Array.from(toggleGroup.querySelectorAll("button"), (button) =>
+        button.textContent?.trim(),
+      ),
+    ).toEqual(["с комиссией", "с налогом"]);
+
+    await user.click(taxToggle);
+
+    expect(taxToggle).toHaveAttribute("aria-pressed", "true");
+    expect(taxToggle).toHaveTextContent("без налога");
+    expect(getDefinitionValue(detailsCard, "налог")).toBe("0,00 ₽");
+    expect(getDefinitionValue(resultsCard, "прибыль")).not.toBe(initialProfit);
+
+    await user.click(commissionToggle);
+
+    expect(commissionToggle).toHaveAttribute("aria-pressed", "true");
+    expect(commissionToggle).toHaveTextContent("без комиссии");
+    expect(getDefinitionValue(detailsCard, "комиссия")).toBe("0,00 ₽");
+    expect(getDefinitionValue(detailsCard, "комиссия")).not.toBe(
+      initialCommission,
+    );
+    expect(screen.getByLabelText("комиссия, %")).toHaveValue("0.05");
+    expect(screen.getByLabelText("налог, %")).toHaveValue("13");
+    expect(loadCalculatorPreferences()).toEqual({
+      commissionPercent: "0.05",
+      taxPercent: "13",
+    });
+  });
+
   it("loads selected bond data and uses the offer mode when an offer exists", async () => {
     const user = userEvent.setup();
     getBasicBondInfoMock.mockResolvedValue(createBond());
@@ -131,7 +188,7 @@ describe("CalculatorPage", () => {
           .querySelectorAll("dt"),
         (element) => element.firstChild?.textContent,
       ),
-    ).toEqual(["погашение", "ближайший купон", "купон (MOEX)", "оферта"]);
+    ).toEqual(["погашение", "дата купона", "купон", "оферта"]);
     expect(screen.getByText("* по данным MOEX")).toHaveClass(
       "text-right",
       "text-xs",
@@ -147,7 +204,7 @@ describe("CalculatorPage", () => {
         name: "Описание показателя «доходность XIRR»",
       }),
     ).toHaveAccessibleDescription(
-      "Годовая доходность после налога с учетом дат купонов, амортизаций и погашения.",
+      "Годовая доходность с учетом дат купонов, амортизаций и погашения.",
     );
     expect(
       screen.queryByRole("button", {
@@ -506,6 +563,14 @@ function renderCalculatorPage() {
   );
 
   return { ...renderResult, queryClient };
+}
+
+function getDefinitionValue(container: Element, label: string): string {
+  const term = Array.from(container.querySelectorAll("dt")).find(
+    (element) => element.firstChild?.textContent === label,
+  );
+
+  return term?.nextElementSibling?.textContent ?? "";
 }
 
 function createBond(overrides: Partial<BasicBondInfo> = {}): BasicBondInfo {

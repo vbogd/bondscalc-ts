@@ -50,6 +50,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FieldGroup, FieldLegend, FieldSet } from "@/components/ui/field";
 import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components/ui/toggle-group";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -94,7 +98,7 @@ const MS_IN_DAY = 24 * 60 * 60 * 1000;
 const CURRENT_YIELD_TOOLTIP = "Текущая доходность по формуле:\nКупон / цена покупки − налог";
 const XIRR_LABEL = "доходность XIRR";
 const XIRR_TOOLTIP =
-  "Годовая доходность после налога с учетом дат купонов, амортизаций и погашения.";
+  "Годовая доходность с учетом дат купонов, амортизаций и погашения.";
 const ANNUALIZED_PROFIT_LABEL = "доходность, год";
 const ANNUALIZED_PROFIT_TOOLTIP =
   "Прибыль после налога относительно затрат, линейно пересчитанная на год.";
@@ -116,6 +120,7 @@ export function CalculatorPage() {
   const [hasPendingMoexUpdate, setHasPendingMoexUpdate] = useState(false);
   const [showOfferUnavailableAlert, setShowOfferUnavailableAlert] = useState(false);
   const [copiedIsin, setCopiedIsin] = useState(false);
+  const [ignoredCosts, setIgnoredCosts] = useState<string[]>([]);
   const copyResetTimerRef = useRef<number | null>(null);
   const offerUnavailableTimerRef = useRef<number | null>(null);
   const initializedSecidRef = useRef<string | null>(null);
@@ -198,6 +203,10 @@ export function CalculatorPage() {
     initializedSecidRef.current = normalizedSecid;
     processedDataRef.current = data;
 
+    if (isNewBond) {
+      setIgnoredCosts([]);
+    }
+
     const initialMode = targetDates.offerDate ? "offer" : "maturity";
     const offerWasRemoved =
       !isNewBond && modeRef.current === "offer" && !targetDates.offerDate;
@@ -269,7 +278,13 @@ export function CalculatorPage() {
       createCalculationView({
         bond: data?.basicInfo ?? null,
         details: data?.details ?? null,
-        form,
+        form: {
+          ...form,
+          commissionPercent: ignoredCosts.includes("commission")
+            ? "0"
+            : form.commissionPercent,
+          taxPercent: ignoredCosts.includes("tax") ? "0" : form.taxPercent,
+        },
         mode,
         accruedInterest: historicalBuyDate
           ? historicalSnapshotQuery.data?.accruedInterest ?? null
@@ -291,6 +306,7 @@ export function CalculatorPage() {
       historicalSnapshotQuery.error,
       historicalSnapshotQuery.isError,
       historicalSnapshotQuery.isLoading,
+      ignoredCosts,
       mode,
     ],
   );
@@ -531,11 +547,11 @@ export function CalculatorPage() {
                     value={formatLocalDate(targetDates.maturityDate)}
                   />
                   <ResultRow
-                    label="ближайший купон"
+                    label="дата купона"
                     value={formatLocalDate(data.basicInfo.coupon_date)}
                   />
                   <ResultRow
-                    label="купон (MOEX)"
+                    label="купон"
                     value={formatMoney(data.basicInfo.coupon_value, data.basicInfo.face_unit)}
                   />
                   <ResultRow
@@ -628,6 +644,32 @@ export function CalculatorPage() {
 
           <ResultPanel
             title="Результаты"
+            controls={
+              <ToggleGroup
+                aria-label="Учет налога и комиссии"
+                className="grid w-full grid-cols-2 gap-2 sm:flex"
+                onValueChange={setIgnoredCosts}
+                type="multiple"
+                value={ignoredCosts}
+              >
+                <ToggleGroupItem
+                  aria-label="Комиссия"
+                  className="rounded-md border border-input bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground active:bg-transparent data-[state=on]:border-foreground/50 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
+                  value="commission"
+                >
+                  {ignoredCosts.includes("commission")
+                    ? "без комиссии"
+                    : "с комиссией"}
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  aria-label="Налог"
+                  className="rounded-md border border-input bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground active:bg-transparent data-[state=on]:border-foreground/50 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
+                  value="tax"
+                >
+                  {ignoredCosts.includes("tax") ? "без налога" : "с налогом"}
+                </ToggleGroupItem>
+              </ToggleGroup>
+            }
             footer={
               calculationView.warnings.length > 0 ? (
                 <div className="text-sm font-medium text-muted-foreground">

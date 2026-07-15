@@ -137,19 +137,26 @@ export function InputField({
 
 export function ResultPanel({
   children,
+  controls,
   footer,
   title,
 }: {
   children: ReactNode;
+  controls?: ReactNode;
   footer?: ReactNode;
   title: string;
 }) {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader
+        className={cn(
+          controls && "flex flex-row flex-wrap items-center justify-between gap-3",
+        )}
+      >
         <CardTitle>
           <h2 className="text-xl">{title}</h2>
         </CardTitle>
+        {controls ? <div className="w-full sm:w-auto">{controls}</div> : null}
       </CardHeader>
       <CardContent>{children}</CardContent>
       {footer ? <CardFooter>{footer}</CardFooter> : null}
