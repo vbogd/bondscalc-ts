@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BasicBondInfo } from "../shared/api/moex";
 import { searchBasicBondInfo } from "../shared/api/moex";
 import { loadSearchQuery, saveSearchQuery } from "../shared/persistence";
@@ -23,6 +23,10 @@ describe("SearchPage", () => {
   beforeEach(() => {
     window.localStorage.clear();
     searchBasicBondInfoMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("restores the persisted search query and runs the search", async () => {
@@ -69,6 +73,23 @@ describe("SearchPage", () => {
     renderSearchPage();
 
     expect(screen.getByRole("button", { name: "Как пользоваться поиском" })).toBeInTheDocument();
+  });
+
+  it("opens the search help by tap when a fine pointer is unavailable", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("matchMedia", () => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    renderSearchPage();
+
+    await user.click(screen.getByRole("button", { name: "Как пользоваться поиском" }));
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Поиск осуществляется по подстроке",
+    );
+    expect(screen.getByRole("button", { name: "Закрыть подсказку" })).toBeInTheDocument();
   });
 
   it("shows search results and an offer badge", async () => {

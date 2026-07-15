@@ -11,13 +11,8 @@ import {
 } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ResponsiveHint } from "@/components/ui/responsive-hint";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 type Tone = "neutral" | "danger" | "up" | "down" | "warning";
@@ -184,26 +179,25 @@ export function ResultRow({
       <dt className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
         <span className="min-w-0">{label}</span>
         {tooltip ? (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  aria-describedby={tooltipId}
-                  aria-label={tooltipLabel}
-                  className="inline-flex size-[1.35em] shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  type="button"
-                >
-                  <CircleHelp className="size-[0.85em]" aria-hidden="true" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent sideOffset={8} className="whitespace-pre-line">
-                {tooltip}
-              </TooltipContent>
-            </Tooltip>
+          <>
+            <ResponsiveHint
+              sideOffset={8}
+              contentClassName="whitespace-pre-line"
+              content={tooltip}
+            >
+              <button
+                aria-describedby={tooltipId}
+                aria-label={tooltipLabel}
+                className="inline-flex size-[1.35em] shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                type="button"
+              >
+                <CircleHelp className="size-[0.85em]" aria-hidden="true" />
+              </button>
+            </ResponsiveHint>
             <span id={tooltipId} className="sr-only">
               {tooltip}
             </span>
-          </TooltipProvider>
+          </>
         ) : null}
       </dt>
       <dd

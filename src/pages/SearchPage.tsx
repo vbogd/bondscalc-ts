@@ -11,12 +11,7 @@ import type { BasicBondInfo, LocalDate } from "../shared/api/moex";
 import { loadSearchQuery, saveSearchQuery } from "../shared/persistence";
 import { BondBadge, SearchInput, StateMessage } from "../shared/ui/FinancialUi";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { ResponsiveHint } from "@/components/ui/responsive-hint";
 
 const BOND_SEARCH_DEBOUNCE_MS = 200;
 
@@ -112,24 +107,23 @@ export function SearchPage() {
 
 function SearchHelpTooltip() {
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0 text-muted-foreground hover:text-foreground [&_svg]:size-6"
-            type="button"
-            aria-label="Как пользоваться поиском"
-          >
-            <CircleHelp aria-hidden="true" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent sideOffset={8} className="whitespace-pre-line">
-          {"Поиск осуществляется по подстроке в полях: SECID, ISIN или название.\nПример: 26233\n\nТакже поддерживается glob-паттерн. Специальные символы:\n* — любое число символов\n? — ровно один символ\n\\* и \\? — обычные * и ?\nВ паттерне нужно минимум 3 обычных символа.\nПример: гтлк*06"}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <ResponsiveHint
+      sideOffset={8}
+      contentClassName="whitespace-pre-line"
+      content={
+        "Поиск осуществляется по подстроке в полях: SECID, ISIN или название.\nПример: 26233\n\nТакже поддерживается glob-паттерн. Специальные символы:\n* — любое число символов\n? — ровно один символ\n\\* и \\? — обычные * и ?\nВ паттерне нужно минимум 3 обычных символа.\nПример: гтлк*06"
+      }
+    >
+      <Button
+        variant="ghost"
+        size="icon"
+        className="shrink-0 text-muted-foreground hover:text-foreground [&_svg]:size-6"
+        type="button"
+        aria-label="Как пользоваться поиском"
+      >
+        <CircleHelp aria-hidden="true" />
+      </Button>
+    </ResponsiveHint>
   );
 }
 
