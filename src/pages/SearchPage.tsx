@@ -215,7 +215,7 @@ function ListLevelBadge({ listLevel }: { listLevel: BasicBondInfo["list_level"] 
       className="mt-1 shrink-0"
       tone={isSuccessLevel ? "up" : "warning"}
     >
-      Уровень {listLevel}
+      Листинг {listLevel}
     </BondBadge>
   );
 }

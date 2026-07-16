@@ -63,9 +63,9 @@ export function BondBadge({
       variant={tone === "danger" ? "destructive" : "outline"}
       className={cn(
         "text-xs font-medium",
-        tone === "up" && "border-primary/20 bg-secondary text-secondary-foreground",
+        tone === "up" && "border-success/25 bg-success/10 text-success",
         tone === "down" && "text-destructive",
-        tone === "warning" && "text-muted-foreground",
+        tone === "warning" && "border-warning/25 bg-warning/10 text-warning",
         className,
       )}
     >

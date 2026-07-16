@@ -118,7 +118,11 @@ describe("SearchPage", () => {
       "href",
       "/bond/RU000A106A86",
     );
-    expect(screen.getByText("Уровень 1")).toBeInTheDocument();
+    expect(screen.getByText("Листинг 1")).toHaveClass(
+      "border-success/25",
+      "bg-success/10",
+      "text-success",
+    );
     expect(screen.getByText("Оферта 05.03.2028")).toBeInTheDocument();
     expect(screen.getByText("03.03.2033")).toBeInTheDocument();
     expect(screen.getByText("Дата купона")).toBeInTheDocument();
@@ -138,7 +142,11 @@ describe("SearchPage", () => {
 
     await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "rzd");
 
-    expect(await screen.findByText("Уровень 3")).toBeInTheDocument();
+    expect(await screen.findByText("Листинг 3")).toHaveClass(
+      "border-warning/25",
+      "bg-warning/10",
+      "text-warning",
+    );
   });
 
   it("sorts search results by short name", async () => {
