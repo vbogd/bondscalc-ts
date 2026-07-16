@@ -22,10 +22,13 @@ const searchBasicBondInfoMock = vi.mocked(searchBasicBondInfo);
 describe("SearchPage", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 6, 16, 12));
     searchBasicBondInfoMock.mockReset();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -92,17 +95,18 @@ describe("SearchPage", () => {
     expect(screen.getByRole("button", { name: "Закрыть подсказку" })).toBeInTheDocument();
   });
 
-  it("shows search results and an offer badge", async () => {
+  it("shows the mobile-first result content and links the whole item", async () => {
     const user = userEvent.setup();
     searchBasicBondInfoMock.mockResolvedValue([
       createBond({
-        secid: "RU000A106A86",
+        secid: "RZD001P25R",
         shortname: "РЖД 001P-25R",
         isin: "RU000A106A86",
-        mat_date: "2033-03-03",
+        mat_date: "2028-10-16",
         coupon_value: 42.38,
         coupon_percent: 8.5,
-        offer_date: "2028-03-05",
+        coupon_date: "2026-07-29",
+        offer_date: "2026-11-16",
         last_price: 94.12,
       }),
     ]);
@@ -116,17 +120,59 @@ describe("SearchPage", () => {
     expect(searchBasicBondInfoMock).toHaveBeenCalledWith("rzd");
     expect(screen.getByRole("link", { name: /РЖД 001P-25R/i })).toHaveAttribute(
       "href",
-      "/bond/RU000A106A86",
+      "/bond/RZD001P25R",
     );
+    expect(screen.getByText("RU000A106A86")).toBeInTheDocument();
+    expect(screen.queryByText("RZD001P25R")).not.toBeInTheDocument();
     expect(screen.getByText("Листинг 1")).toHaveClass(
       "border-success/25",
       "bg-success/10",
       "text-success",
     );
-    expect(screen.getByText("Оферта 05.03.2028")).toBeInTheDocument();
-    expect(screen.getByText("03.03.2033")).toBeInTheDocument();
+    expect(screen.getByText("Тек. доходность")).toBeInTheDocument();
+    expect(screen.getByText("9,03 %")).toHaveClass("font-semibold");
+    expect(screen.getByText("94,12 %")).toBeInTheDocument();
+    expect(screen.getByText("Погашение")).toBeInTheDocument();
+    expect(screen.getByText("16.10.2028")).toBeInTheDocument();
+    expect(screen.getByText("2 л. 3 мес.")).toBeInTheDocument();
+    expect(screen.getByText("Оферта")).toBeInTheDocument();
+    expect(screen.getByText("4 мес.")).toBeInTheDocument();
+    expect(screen.getByText("16.11.2026")).toBeInTheDocument();
     expect(screen.getByText("Дата купона")).toBeInTheDocument();
-    expect(screen.getByText("20.07.2026")).toBeInTheDocument();
+    expect(screen.getByText("13 дн.")).toBeInTheDocument();
+    expect(screen.getByText("29.07.2026")).toBeInTheDocument();
+    expect(screen.getByText("Купон")).toBeInTheDocument();
+    expect(screen.getByText("42,38 ₽")).toHaveClass(
+      "text-sm",
+      "text-muted-foreground",
+    );
+    expect(screen.getByText("Погашение").closest("dl")).toHaveClass(
+      "text-base",
+    );
+    expect(screen.getByText("8,5 %")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "РЖД 001P-25R" }),
+    ).toHaveClass("text-lg");
+  });
+
+  it("uses the success style for a level 2 listing badge", async () => {
+    const user = userEvent.setup();
+    searchBasicBondInfoMock.mockResolvedValue([
+      createBond({
+        secid: "RU000A106A86",
+        shortname: "РЖД 001P-25R",
+        list_level: 2,
+      }),
+    ]);
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "rzd");
+
+    expect(await screen.findByText("Листинг 2")).toHaveClass(
+      "border-success/25",
+      "bg-success/10",
+      "text-success",
+    );
   });
 
   it("shows a warning list level badge for level 3", async () => {
@@ -181,7 +227,27 @@ describe("SearchPage", () => {
 
     await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "26240");
 
-    expect(await screen.findByText("101,25")).toHaveClass("text-destructive");
+    expect(await screen.findByText("101,25 %")).toHaveClass(
+      "text-destructive",
+    );
+  });
+
+  it("does not highlight a bond price at 100", async () => {
+    const user = userEvent.setup();
+    searchBasicBondInfoMock.mockResolvedValue([
+      createBond({
+        secid: "SU26240RMFS0",
+        shortname: "ОФЗ 26240",
+        last_price: 100,
+      }),
+    ]);
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "26240");
+
+    expect(await screen.findByText("100 %")).not.toHaveClass(
+      "text-destructive",
+    );
   });
 
   it("shows current yield adjusted by bond price with two fraction digits", async () => {
@@ -198,6 +264,105 @@ describe("SearchPage", () => {
 
     expect(await screen.findByText("Тек. доходность")).toBeInTheDocument();
     expect(screen.getByText("12,50 %")).toBeInTheDocument();
+  });
+
+  it("hides the offer row when the offer date is absent", async () => {
+    const user = userEvent.setup();
+    searchBasicBondInfoMock.mockResolvedValue([
+      createBond({
+        offer_date: null,
+      }),
+    ]);
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "262");
+
+    await screen.findByRole("heading", { name: "ОФЗ 26233" });
+    expect(screen.queryByText("Оферта")).not.toBeInTheDocument();
+  });
+
+  it("shows today and a past relative term deterministically", async () => {
+    const user = userEvent.setup();
+    searchBasicBondInfoMock.mockResolvedValue([
+      createBond({
+        mat_date: "2026-07-16",
+        coupon_date: "2026-07-04",
+      }),
+    ]);
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "262");
+
+    expect(await screen.findByText("сегодня")).toBeInTheDocument();
+    expect(screen.getByText("12 дн. назад")).toBeInTheDocument();
+  });
+
+  it("uses days through 60 days and months starting from 61 days", async () => {
+    const user = userEvent.setup();
+    searchBasicBondInfoMock.mockResolvedValue([
+      createBond({
+        mat_date: "2026-09-14",
+        coupon_date: "2026-09-15",
+      }),
+    ]);
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "262");
+
+    expect(await screen.findByText("60 дн.")).toBeInTheDocument();
+    expect(screen.getByText("1 мес.")).toBeInTheDocument();
+  });
+
+  it("shows unknown result values as dashes", async () => {
+    const user = userEvent.setup();
+    searchBasicBondInfoMock.mockResolvedValue([
+      createBond({
+        mat_date: null,
+        coupon_percent: null,
+        coupon_value: null,
+        coupon_period: 0,
+        prev_price: null,
+        last_price: null,
+      }),
+    ]);
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "262");
+
+    await screen.findByRole("heading", { name: "ОФЗ 26233" });
+
+    for (const label of [
+      "Тек. доходность",
+      "Цена",
+      "Погашение",
+      "Купон",
+    ]) {
+      expect(screen.getByText(label).parentElement).toHaveTextContent("—");
+    }
+  });
+
+  it("keeps a long title readable next to the listing badge", async () => {
+    const user = userEvent.setup();
+    const longTitle =
+      "Очень длинное название облигации для проверки переноса на мобильном экране";
+    searchBasicBondInfoMock.mockResolvedValue([
+      createBond({
+        shortname: longTitle,
+      }),
+    ]);
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "262");
+
+    const heading = await screen.findByRole("heading", { name: longTitle });
+    const link = screen.getByRole("link", { name: new RegExp(longTitle) });
+
+    expect(heading).toHaveClass("line-clamp-2");
+    expect(heading.closest('[data-slot="item-content"]')).toHaveClass(
+      "min-w-0",
+    );
+    expect(link).toHaveClass("w-full", "min-w-0");
+    expect(screen.getByText("Листинг 1")).toHaveClass("shrink-0");
   });
 
   it("shows an error state when the search request fails", async () => {
