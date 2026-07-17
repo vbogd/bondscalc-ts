@@ -44,7 +44,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Alert } from "@/components/ui/alert";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,7 +92,7 @@ type ResultSection = {
 
 type CalculationView = {
   summaryRows: CalculationRow[];
-  detailSections: ResultSection[];
+  detailSections: ResultSection[] | null;
   warningAlert: string | null;
   warnings: string[];
 };
@@ -774,22 +774,29 @@ export function CalculatorPage() {
             </dl>
           </ResultPanel>
 
-          <ResultPanel title="Детализация">
-            <div className="divide-y divide-border">
-              {calculationView.detailSections.map((section) => (
-                <div className="py-4 first:pt-0 last:pb-0" key={section.title}>
-                  <h3 className="text-xs font-semibold uppercase leading-5 text-muted-foreground">
-                    {section.title}
-                  </h3>
-                  <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-base leading-5">
-                    {section.rows.map((row) => (
-                      <ResultRow key={`${section.title}-${row.label}`} {...row} />
-                    ))}
-                  </dl>
-                </div>
-              ))}
-            </div>
-          </ResultPanel>
+          {calculationView.detailSections ? (
+            <ResultPanel title="Детализация">
+              <div className="divide-y divide-border">
+                {calculationView.detailSections.map((section) => (
+                  <div className="py-4 first:pt-0 last:pb-0" key={section.title}>
+                    <h3 className="text-xs font-semibold uppercase leading-5 text-muted-foreground">
+                      {section.title}
+                    </h3>
+                    <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-base leading-5">
+                      {section.rows.map((row) => (
+                        <ResultRow key={`${section.title}-${row.label}`} {...row} />
+                      ))}
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            </ResultPanel>
+          ) : (
+            <Alert variant="warning">
+              <AlertTriangle aria-hidden="true" />
+              <AlertTitle>Детализация недоступна</AlertTitle>
+            </Alert>
+          )}
         </>
       )}
     </section>
@@ -949,16 +956,16 @@ function createCalculationView({
     !bond ||
     !details
   ) {
-    return createEmptyCalculationView(mode, currentYieldPercent);
+    return createUnavailableCalculationView({ mode, currentYieldPercent });
   }
 
   if (accruedInterest === null) {
-    return createEmptyCalculationView(
+    return createUnavailableCalculationView({
       mode,
       currentYieldPercent,
-      accruedInterestMessage && !warningAlert ? [accruedInterestMessage] : [],
+      warnings: accruedInterestMessage && !warningAlert ? [accruedInterestMessage] : [],
       warningAlert,
-    );
+    });
   }
 
   const amortizationProjection = createAmortizationCashFlows({
@@ -1002,40 +1009,7 @@ function createCalculationView({
   const currency = bond.face_unit;
 
   return {
-    summaryRows: [
-      {
-        label: "тек. доходность",
-        value: formatPercent(currentYieldPercent),
-        tooltip: CURRENT_YIELD_TOOLTIP,
-        tooltipLabel: "Формула текущей доходности",
-      },
-      ...(mode === "sale"
-        ? [
-            {
-              label: ANNUALIZED_PROFIT_LABEL,
-              value: formatPercent(result.annualizedReturnPercent),
-              tooltip: ANNUALIZED_PROFIT_TOOLTIP,
-              strong: true,
-              valueTone: getProfitTone(result.annualizedReturnPercent),
-            },
-          ]
-        : [
-            {
-              label: XIRR_LABEL,
-              value: formatPercent(result.annualizedXirrPercent),
-              tooltip: XIRR_TOOLTIP,
-              strong: true,
-              valueTone: getProfitTone(result.annualizedXirrPercent),
-            },
-          ]),
-      {
-        label: "прибыль",
-        value: formatMoney(result.profitAfterTax, currency),
-        strong: true,
-        valueTone: getProfitTone(result.profitAfterTax),
-      },
-      { label: "срок, дней", value: formatNumber(result.holdingDays) },
-    ],
+    summaryRows: createSummaryRows({ mode, currentYieldPercent, result, currency }),
     detailSections: [
       {
         title: "Покупка",
@@ -1289,72 +1263,74 @@ function createCashFlowWarnings({
   return warnings;
 }
 
-function createEmptyCalculationView(
-  mode: CalculatorMode,
-  currentYieldPercent: number | null,
-  warnings: string[] = [],
-  warningAlert: string | null = null,
-): CalculationView {
+function createUnavailableCalculationView({
+  mode,
+  currentYieldPercent,
+  warnings = [],
+  warningAlert = null,
+}: {
+  mode: CalculatorMode;
+  currentYieldPercent: number | null;
+  warnings?: string[];
+  warningAlert?: string | null;
+}): CalculationView {
   return {
-    summaryRows: [
-      {
-        label: "тек. доходность",
-        value: formatPercent(currentYieldPercent),
-        tooltip: CURRENT_YIELD_TOOLTIP,
-        tooltipLabel: "Формула текущей доходности",
-      },
-      ...(mode === "sale"
-        ? [
-            {
-              label: ANNUALIZED_PROFIT_LABEL,
-              value: "—",
-              tooltip: ANNUALIZED_PROFIT_TOOLTIP,
-              strong: true,
-            },
-          ]
-        : [
-            {
-              label: XIRR_LABEL,
-              value: "—",
-              tooltip: XIRR_TOOLTIP,
-              strong: true,
-            },
-          ]),
-      { label: "прибыль", value: "—", strong: true },
-      { label: "срок, дней", value: "—" },
-    ],
-    detailSections: [
-      {
-        title: "Покупка",
-        rows: [
-          { label: "чистая цена", value: "—" },
-          { label: "НКД покупки", value: "—" },
-          { label: "комиссия", value: "—" },
-          { label: "итого списано", value: "—", strong: true },
-        ],
-      },
-      {
-        title: "Продажа",
-        rows: [
-          { label: "чистая цена", value: "—" },
-          { label: "амортизация за период", value: "—" },
-          { label: "НКД продажи", value: "—" },
-          { label: "получено купонов", value: "—" },
-          { label: "комиссия продажи", value: "—" },
-          { label: "итого получено", value: "—", strong: true },
-        ],
-      },
-      {
-        title: "Результат и налог",
-        rows: [
-          { label: "прибыль до налога", value: "—" },
-          { label: "налог", value: "—" },
-        ],
-      },
-    ],
+    summaryRows: createSummaryRows({ mode, currentYieldPercent }),
+    detailSections: null,
     warningAlert,
     warnings,
   };
+}
+
+function createSummaryRows({
+  currency,
+  currentYieldPercent,
+  mode,
+  result,
+}: {
+  currency?: string;
+  currentYieldPercent: number | null;
+  mode: CalculatorMode;
+  result?: ReturnType<typeof calculateBondTrade>;
+}): CalculationRow[] {
+  const annualizedReturnPercent = result?.annualizedReturnPercent ?? null;
+  const annualizedXirrPercent = result?.annualizedXirrPercent ?? null;
+  const profitAfterTax = result?.profitAfterTax ?? null;
+
+  return [
+    {
+      label: "тек. доходность",
+      value: formatPercent(currentYieldPercent),
+      tooltip: CURRENT_YIELD_TOOLTIP,
+      tooltipLabel: "Формула текущей доходности",
+    },
+    ...(mode === "sale"
+      ? [
+          {
+            label: ANNUALIZED_PROFIT_LABEL,
+            value: formatPercent(annualizedReturnPercent),
+            tooltip: ANNUALIZED_PROFIT_TOOLTIP,
+            strong: true,
+            valueTone: getProfitTone(annualizedReturnPercent),
+          },
+        ]
+      : [
+          {
+            label: XIRR_LABEL,
+            value: formatPercent(annualizedXirrPercent),
+            tooltip: XIRR_TOOLTIP,
+            strong: true,
+            valueTone: getProfitTone(annualizedXirrPercent),
+          },
+        ]),
+    {
+      label: "прибыль",
+      value: result && currency ? formatMoney(profitAfterTax, currency) : "—",
+      strong: true,
+      valueTone: getProfitTone(profitAfterTax),
+    },
+    { label: "срок, дней", value: result ? formatNumber(result.holdingDays) : "—" },
+  ];
 }
 
 function calculateCurrentYieldAfterTax({

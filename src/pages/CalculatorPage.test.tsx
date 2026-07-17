@@ -533,7 +533,23 @@ describe("CalculatorPage", () => {
     expect(getDefinitionValue(detailsCard, "итого списано")).toContain("€");
   });
 
-  it("does not substitute zero accrued interest for a ruble bond", async () => {
+  it("replaces details with an alert when calculation inputs are incomplete", async () => {
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    fireEvent.change(screen.getByLabelText("цена, %"), {
+      target: { value: "" },
+    });
+
+    expect(screen.getByRole("heading", { name: "Результаты" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Детализация" })).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Детализация недоступна");
+  });
+
+  it("replaces details with an alert when accrued interest is unavailable", async () => {
     getBasicBondInfoMock.mockResolvedValue(createBond());
     getBondDetailsMock.mockResolvedValue(
       createDetails({ cashFlowBoardId: null, marketBoards: [] }),
@@ -542,11 +558,9 @@ describe("CalculatorPage", () => {
     renderCalculatorPage();
 
     await screen.findByRole("heading", { name: "Тест 001" });
-    const detailsCard = screen
-      .getByRole("heading", { name: "Детализация" })
-      .closest('[data-slot="card"]')!;
 
-    expect(getDefinitionValue(detailsCard, "НКД покупки")).toBe("—");
+    expect(screen.queryByRole("heading", { name: "Детализация" })).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Детализация недоступна");
     expect(
       screen.queryByText(
         "НКД в валюте номинала недоступен через MOEX API.\nВ расчетах используется НКД равный 0.",
