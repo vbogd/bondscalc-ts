@@ -6,6 +6,21 @@ import {
   searchBasicBondInfo,
 } from ".";
 
+const foreignCurrencyBonds = [
+  {
+    secid: "RU000A10F728",
+    faceUnit: "CNY",
+    maturityDate: "2030-04-29",
+    expectedCashFlowCurrency: "CNY",
+  },
+  {
+    secid: "RU000A105BY1",
+    faceUnit: "EUR",
+    maturityDate: "2028-11-17",
+    expectedCashFlowCurrency: null,
+  },
+] as const;
+
 describe("MOEX ISS client integration", () => {
   it("merges live search results with the primary-board snapshot", async () => {
     const results = await searchBasicBondInfo("SU26233");
@@ -61,7 +76,8 @@ describe("MOEX ISS client integration", () => {
   });
 
   it("loads live bond details with board and maturity data", async () => {
-    const details = await getBondDetails("SU26233RMFS5");
+    const bond = await getBasicBondInfo({ secid: "SU26233RMFS5" });
+    const details = await getBondDetails(bond);
 
     expect(details).toMatchObject({
       secid: "SU26233RMFS5",
@@ -90,10 +106,8 @@ describe("MOEX ISS client integration", () => {
   });
 
   it("loads the live calculator payload for a selected bond", async () => {
-    const [bond, details] = await Promise.all([
-      getBasicBondInfo({ secid: "SU26233RMFS5" }),
-      getBondDetails("SU26233RMFS5"),
-    ]);
+    const bond = await getBasicBondInfo({ secid: "SU26233RMFS5" });
+    const details = await getBondDetails(bond);
 
     expect(bond).toMatchObject({
       secid: "SU26233RMFS5",
@@ -110,4 +124,54 @@ describe("MOEX ISS client integration", () => {
     expect(bond.nkd).toEqual(expect.any(Number));
     expect(bond.coupon_percent).toEqual(expect.any(Number));
   });
+
+  it("uses the primary-board price and USD accrued interest for RU000A107B43", async () => {
+    const bond = await getBasicBondInfo({ secid: "RU000A107B43" });
+    const details = await getBondDetails(bond);
+    const primaryBoard = details.marketBoards.find((board) => board.isPrimary);
+    const cashFlowBoard = details.marketBoards.find(
+      (board) => board.boardId === details.cashFlowBoardId,
+    );
+
+    expect(bond).toMatchObject({ board_id: "TQCB", face_unit: "USD" });
+    expect(primaryBoard).toMatchObject({
+      boardId: "TQCB",
+      currencyId: "SUR",
+      lastPrice: expect.any(Number),
+    });
+    expect(cashFlowBoard).toMatchObject({
+      currencyId: "USD",
+      accruedInterest: expect.any(Number),
+    });
+  });
+
+  it.each(foreignCurrencyBonds)(
+    "uses safe board data for $faceUnit bond $secid",
+    async ({ secid, faceUnit, maturityDate, expectedCashFlowCurrency }) => {
+      const bond = await getBasicBondInfo({ secid });
+      const details = await getBondDetails(bond);
+      const primaryBoard = details.marketBoards.find((board) => board.isPrimary);
+      const cashFlowBoard = details.marketBoards.find(
+        (board) => board.boardId === details.cashFlowBoardId,
+      );
+
+      expect(bond).toMatchObject({
+        secid,
+        face_unit: faceUnit,
+        mat_date: maturityDate,
+      });
+      expect(primaryBoard?.lastPrice ?? primaryBoard?.previousPrice).toEqual(
+        expect.any(Number),
+      );
+      if (expectedCashFlowCurrency) {
+        expect(cashFlowBoard).toMatchObject({
+          currencyId: expectedCashFlowCurrency,
+          accruedInterest: expect.any(Number),
+        });
+      } else {
+        expect(details.cashFlowBoardId).toBeNull();
+        expect(cashFlowBoard).toBeUndefined();
+      }
+    },
+  );
 });

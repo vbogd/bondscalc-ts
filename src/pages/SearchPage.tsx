@@ -5,7 +5,8 @@ import { Link } from "react-router-dom";
 import {
   isBondSearchQueryValid,
   MAX_BOND_SEARCH_QUERY_LENGTH,
-  searchBasicBondInfo,
+  primaryBondSnapshotQuery,
+  searchPrimaryBondSnapshot,
 } from "../shared/api/moex";
 import type { BasicBondInfo, LocalDate } from "../shared/api/moex";
 import { loadSearchQuery, saveSearchQuery } from "../shared/persistence";
@@ -37,15 +38,17 @@ export function SearchPage() {
   const canRunSearch = canSearch && isBondSearchQueryValid(debouncedQuery);
   const isDebouncing = canSearch && normalizedQuery !== debouncedQuery;
   const {
-    data: bonds = [],
+    data: snapshot = [],
     error,
     isError,
     isFetching,
   } = useQuery({
-    queryKey: ["bond-search", debouncedQuery],
-    queryFn: () => searchBasicBondInfo(debouncedQuery),
+    ...primaryBondSnapshotQuery,
     enabled: canRunSearch,
   });
+  const bonds = canRunSearch
+    ? searchPrimaryBondSnapshot(snapshot, debouncedQuery)
+    : [];
   const sortedBonds = [...bonds].sort((left, right) =>
     left.shortname.localeCompare(right.shortname, "ru"),
   );
@@ -170,7 +173,7 @@ function BondSearchResult({ bond }: { bond: BasicBondInfo }) {
         asChild
         className="gap-x-3 gap-y-4 rounded-none px-1 py-4 active:bg-accent/70 sm:px-2"
       >
-        <Link to={`/bond/${bond.secid}`}>
+        <Link to={`/bond/${bond.secid}`} state={{ fromSearch: true }}>
           <ItemContent className="self-start">
             <ItemTitle asChild>
               <h2 className="line-clamp-2 w-auto text-lg text-foreground">

@@ -1,19 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Check,
   Copy,
   ExternalLink,
   Loader2,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  getBasicBondInfo,
   getBondDetails,
   getHistoricalBondSnapshot,
+  primaryBondSnapshotQuery,
 } from "../shared/api/moex";
 import type {
   BasicBondInfo,
@@ -42,6 +44,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Alert } from "@/components/ui/alert";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -90,6 +93,7 @@ type ResultSection = {
 type CalculationView = {
   summaryRows: CalculationRow[];
   detailSections: ResultSection[];
+  warningAlert: string | null;
   warnings: string[];
 };
 
@@ -102,6 +106,8 @@ const XIRR_TOOLTIP =
 const ANNUALIZED_PROFIT_LABEL = "доходность, год";
 const ANNUALIZED_PROFIT_TOOLTIP =
   "Прибыль после налога относительно затрат, линейно пересчитанная на год.";
+const MISSING_NOMINAL_CURRENCY_ACCRUED_INTEREST_MESSAGE =
+  "НКД в валюте номинала недоступен через MOEX API.\nВ расчетах используется НКД равный 0.";
 
 const modeLabels: Record<CalculatorMode, string> = {
   maturity: "Погашение",
@@ -111,7 +117,10 @@ const modeLabels: Record<CalculatorMode, string> = {
 
 export function CalculatorPage() {
   const { secid = "SU26233RMFS5" } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const normalizedSecid = secid.trim().toUpperCase();
+  const cameFromSearch = location.state?.fromSearch === true;
   const [mode, setMode] = useState<CalculatorMode>("maturity");
   const [form, setForm] = useState<CalculatorForm>(() => createDefaultForm());
   const [editedFields, setEditedFields] = useState<Set<keyof CalculatorForm>>(
@@ -150,23 +159,48 @@ export function CalculatorPage() {
     };
   }, []);
 
-  const { data, error, isError, isLoading, refetch } = useQuery({
-    queryKey: ["bond-calculator", normalizedSecid],
-    queryFn: async () => {
-      const [basicInfo, details] = await Promise.all([
-        getBasicBondInfo({ secid: normalizedSecid }),
-        getBondDetails(normalizedSecid),
-      ]);
-
-      return { basicInfo, details };
-    },
+  const primaryBondSnapshotQueryResult = useQuery(primaryBondSnapshotQuery);
+  const basicInfo = primaryBondSnapshotQueryResult.data?.find(
+    (bond) => bond.secid === normalizedSecid,
+  );
+  const bondDetailsQuery = useQuery({
+    queryKey: [
+      "bond-calculator-details",
+      normalizedSecid,
+      basicInfo?.board_id,
+      basicInfo?.offer_date,
+    ],
+    queryFn: () => getBondDetails(basicInfo!),
+    enabled: Boolean(basicInfo),
   });
+  const data = useMemo(
+    () =>
+      basicInfo && bondDetailsQuery.data
+        ? { basicInfo, details: bondDetailsQuery.data }
+        : undefined,
+    [basicInfo, bondDetailsQuery.data],
+  );
+  const snapshotBondNotFound =
+    primaryBondSnapshotQueryResult.data !== undefined && !basicInfo;
+  const error =
+    primaryBondSnapshotQueryResult.error ??
+    bondDetailsQuery.error ??
+    (snapshotBondNotFound
+      ? new Error(`MOEX не вернула базовые данные для ${normalizedSecid}.`)
+      : null);
+  const isError =
+    primaryBondSnapshotQueryResult.isError ||
+    bondDetailsQuery.isError ||
+    snapshotBondNotFound;
+  const isLoading =
+    primaryBondSnapshotQueryResult.isLoading ||
+    (Boolean(basicInfo) && bondDetailsQuery.isLoading);
   const historicalBuyDate = isPastLocalDate(form.buyDate) ? form.buyDate : null;
   const historicalSnapshotQuery = useQuery({
     queryKey: [
       "bond-calculator-history",
       normalizedSecid,
-      data?.details.boardId,
+      data?.details.cashFlowBoardId,
       historicalBuyDate,
     ],
     queryFn: () => {
@@ -176,12 +210,19 @@ export function CalculatorPage() {
 
       return getHistoricalBondSnapshot({
         secid: normalizedSecid,
-        boardId: data.details.boardId,
+        boardId: data.details.cashFlowBoardId!,
         date: historicalBuyDate,
       });
     },
-    enabled: Boolean(data && historicalBuyDate),
+    enabled: Boolean(data?.details.cashFlowBoardId && historicalBuyDate),
   });
+  const usesZeroAccruedInterestFallback = Boolean(
+    data &&
+      isForeignCurrencyBond(data.basicInfo) &&
+      (historicalBuyDate
+        ? !data.details.cashFlowBoardId
+        : getCashFlowAccruedInterest(data.details) === null),
+  );
 
   const targetDates = useMemo(
     () => (data ? getTargetDates(data.basicInfo, data.details) : null),
@@ -232,7 +273,7 @@ export function CalculatorPage() {
       modeRef.current = nextMode;
       setMode(nextMode);
       setForm((currentForm) =>
-        createFormFromBond(data.basicInfo, targetDates, nextMode, {
+        createFormFromBond(data.basicInfo, data.details, targetDates, nextMode, {
           commissionPercent: currentForm.commissionPercent,
           taxPercent: currentForm.taxPercent,
         }),
@@ -287,15 +328,21 @@ export function CalculatorPage() {
         },
         mode,
         accruedInterest: historicalBuyDate
-          ? historicalSnapshotQuery.data?.accruedInterest ?? null
-          : data?.basicInfo.nkd ?? null,
-        accruedInterestMessage: historicalBuyDate
-          ? historicalSnapshotQuery.isError
-            ? getErrorMessage(historicalSnapshotQuery.error)
-            : historicalSnapshotQuery.isLoading
-              ? "Загружаем исторический НКД из MOEX."
-              : null
-          : null,
+          ? historicalSnapshotQuery.data?.accruedInterest ??
+            (usesZeroAccruedInterestFallback ? 0 : null)
+          : data
+            ? getCashFlowAccruedInterest(data.details) ??
+              (usesZeroAccruedInterestFallback ? 0 : null)
+            : null,
+        accruedInterestMessage: usesZeroAccruedInterestFallback
+          ? MISSING_NOMINAL_CURRENCY_ACCRUED_INTEREST_MESSAGE
+          : historicalBuyDate
+            ? historicalSnapshotQuery.isError
+              ? getErrorMessage(historicalSnapshotQuery.error)
+              : historicalSnapshotQuery.isLoading
+                ? "Загружаем исторический НКД из MOEX."
+                : null
+            : null,
       }),
     [
       data?.basicInfo,
@@ -308,6 +355,7 @@ export function CalculatorPage() {
       historicalSnapshotQuery.isLoading,
       ignoredCosts,
       mode,
+      usesZeroAccruedInterestFallback,
     ],
   );
 
@@ -359,16 +407,26 @@ export function CalculatorPage() {
   }
 
   async function handleManualMoexRefresh() {
-    const result = await refetch();
+    const [snapshotResult, detailsResult] = await Promise.all([
+      primaryBondSnapshotQueryResult.refetch(),
+      bondDetailsQuery.refetch(),
+    ]);
 
-    if (!result.data || result.isError) {
+    const freshBasicInfo = snapshotResult.data?.find(
+      (bond) => bond.secid === normalizedSecid,
+    );
+    const freshDetails = detailsResult.data;
+
+    if (
+      !freshBasicInfo ||
+      !freshDetails ||
+      snapshotResult.isError ||
+      detailsResult.isError
+    ) {
       return;
     }
 
-    const freshTargetDates = getTargetDates(
-      result.data.basicInfo,
-      result.data.details,
-    );
+    const freshTargetDates = getTargetDates(freshBasicInfo, freshDetails);
     const offerWasRemoved =
       modeRef.current === "offer" && !freshTargetDates.offerDate;
     const nextMode = offerWasRemoved ? "maturity" : modeRef.current;
@@ -387,11 +445,14 @@ export function CalculatorPage() {
     }
 
     initializedSecidRef.current = normalizedSecid;
-    processedDataRef.current = result.data;
+    processedDataRef.current = {
+      basicInfo: freshBasicInfo,
+      details: freshDetails,
+    };
     modeRef.current = nextMode;
     setMode(nextMode);
     setForm((currentForm) =>
-      createFormFromBond(result.data.basicInfo, freshTargetDates, nextMode, {
+      createFormFromBond(freshBasicInfo, freshDetails, freshTargetDates, nextMode, {
         commissionPercent: currentForm.commissionPercent,
         taxPercent: currentForm.taxPercent,
       }),
@@ -443,16 +504,29 @@ export function CalculatorPage() {
         <>
           <div className="space-y-3">
             <header className="flex items-center justify-between gap-3">
-              <Button
-                asChild
-                variant="ghost"
-                size="icon"
-                className="shrink-0 [&_svg]:size-6"
-              >
-                <Link to="/" aria-label="Назад к поиску">
+              {cameFromSearch ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 [&_svg]:size-6"
+                  onClick={() => navigate(-1)}
+                  type="button"
+                  aria-label="Назад к поиску"
+                >
                   <ArrowLeft className="size-5" aria-hidden="true" />
-                </Link>
-              </Button>
+                </Button>
+              ) : (
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 [&_svg]:size-6"
+                >
+                  <Link to="/" aria-label="Открыть поиск облигаций">
+                    <Search className="size-5" aria-hidden="true" />
+                  </Link>
+                </Button>
+              )}
               <div className="flex shrink-0 items-center gap-1">
                 {isFormDirty && hasPendingMoexUpdate ? (
                   <TooltipProvider>
@@ -671,9 +745,24 @@ export function CalculatorPage() {
               </ToggleGroup>
             }
             footer={
-              calculationView.warnings.length > 0 ? (
-                <div className="text-sm font-medium text-muted-foreground">
-                  {calculationView.warnings.join(" ")}
+              calculationView.warningAlert || calculationView.warnings.length > 0 ? (
+                <div className="space-y-3">
+                  {calculationView.warningAlert ? (
+                    <Alert variant="warning">
+                      <AlertTriangle aria-hidden="true" />
+                      <div className="col-start-2 w-full whitespace-pre-line font-medium">
+                        {calculationView.warningAlert}
+                      </div>
+                    </Alert>
+                  ) : null}
+                  {calculationView.warnings.length > 0 ? (
+                    <Alert variant="warning">
+                      <AlertTriangle aria-hidden="true" />
+                      <div className="col-start-2 w-full font-medium">
+                        {calculationView.warnings.join(" ")}
+                      </div>
+                    </Alert>
+                  ) : null}
                 </div>
               ) : null
             }
@@ -749,6 +838,7 @@ function createDefaultForm(): CalculatorForm {
 
 function createFormFromBond(
   bond: BasicBondInfo,
+  details: BondDetails,
   targetDates: TargetDates,
   mode: CalculatorMode,
   preferences: CalculatorPreferences,
@@ -759,7 +849,7 @@ function createFormFromBond(
     commissionPercent: preferences.commissionPercent,
     taxPercent: preferences.taxPercent,
     buyDate: getTodayLocalDate(),
-    buyPrice: formatInputNumber(getDisplayPrice(bond) ?? 100),
+    buyPrice: formatInputNumber(getDisplayPrice(bond, details) ?? 100),
     sellDate: getModeDate(mode, targetDates, getTodayLocalDate()),
     sellPrice: getModePrice(mode, targetDates),
   };
@@ -843,6 +933,10 @@ function createCalculationView({
   const sellPrice = parseDecimal(form.sellPrice);
   const days = getDaysBetween(form.buyDate, form.sellDate);
   const currentYieldPercent = calculateCurrentYieldFromForm(form);
+  const warningAlert =
+    accruedInterestMessage === MISSING_NOMINAL_CURRENCY_ACCRUED_INTEREST_MESSAGE
+      ? accruedInterestMessage
+      : null;
 
   if (
     faceValue === null ||
@@ -862,7 +956,8 @@ function createCalculationView({
     return createEmptyCalculationView(
       mode,
       currentYieldPercent,
-      accruedInterestMessage ? [accruedInterestMessage] : [],
+      accruedInterestMessage && !warningAlert ? [accruedInterestMessage] : [],
+      warningAlert,
     );
   }
 
@@ -904,7 +999,7 @@ function createCalculationView({
     coupons: couponProjection.cashFlows,
     amortizations: amortizationProjection.cashFlows,
   });
-  const currency = bond.currency_id;
+  const currency = bond.face_unit;
 
   return {
     summaryRows: [
@@ -1004,6 +1099,7 @@ function createCalculationView({
         ],
       },
     ],
+    warningAlert,
     warnings: [
       ...result.warnings,
       ...createCashFlowWarnings({
@@ -1201,6 +1297,7 @@ function createEmptyCalculationView(
   mode: CalculatorMode,
   currentYieldPercent: number | null,
   warnings: string[] = [],
+  warningAlert: string | null = null,
 ): CalculationView {
   return {
     summaryRows: [
@@ -1260,6 +1357,7 @@ function createEmptyCalculationView(
         ],
       },
     ],
+    warningAlert,
     warnings,
   };
 }
@@ -1346,8 +1444,27 @@ function isFutureOrToday(date: LocalDate): boolean {
   return date >= getTodayLocalDate();
 }
 
-function getDisplayPrice(bond: BasicBondInfo): number | null {
-  return bond.last_price ?? bond.prev_price;
+function getDisplayPrice(bond: BasicBondInfo, details: BondDetails): number | null {
+  const primaryBoard = details.marketBoards.find((board) => board.isPrimary);
+  const snapshotPrice = bond.last_price ?? bond.prev_price;
+
+  return (
+    snapshotPrice ?? primaryBoard?.lastPrice ?? primaryBoard?.previousPrice ?? null
+  );
+}
+
+function getCashFlowAccruedInterest(details: BondDetails): number | null {
+  const cashFlowBoard = details.marketBoards.find(
+    (board) => board.boardId === details.cashFlowBoardId,
+  );
+
+  return cashFlowBoard?.accruedInterest ?? null;
+}
+
+function isForeignCurrencyBond(bond: BasicBondInfo): boolean {
+  const faceUnit = bond.face_unit.trim().toUpperCase();
+
+  return faceUnit !== "SUR" && faceUnit !== "RUB";
 }
 
 function getProfitTone(value: number | null): "neutral" | "up" | "down" {

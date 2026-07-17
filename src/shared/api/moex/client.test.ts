@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import wildcardMatch from "wildcard-match";
+import type { BasicBondInfo } from "./types";
 
 vi.mock("wildcard-match", async (importOriginal) => {
   const actual = (await importOriginal()) as {
@@ -38,6 +39,16 @@ describe("MOEX ISS client", () => {
     expect(getFetchUrl(fetchMock).pathname).toBe(
       "/iss/engines/stock/markets/bonds/securities.json",
     );
+    expectIssRequest(getFetchUrl(fetchMock), {
+      "iss.meta": "off",
+      "iss.json": "compact",
+      "iss.dp": "dot",
+      "iss.only": "securities,marketdata",
+      primary_board: "1",
+      "securities.columns":
+        "SECID,BOARDID,SHORTNAME,COUPONVALUE,NEXTCOUPON,ACCRUEDINT,PREVPRICE,FACEVALUE,MATDATE,COUPONPERIOD,ISSUESIZE,FACEUNIT,ISIN,REGNUMBER,CURRENCYID,LISTLEVEL,COUPONPERCENT,OFFERDATE",
+      "marketdata.columns": "BOARDID,SECID,LAST",
+    });
   });
 
   it("searches by SECID prefix", async () => {
@@ -157,19 +168,92 @@ describe("MOEX ISS client", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("loads schedules and the selected bond's board data", async () => {
+    const fetchMock = vi.fn(async (url: URL): Promise<FetchResponse> => {
+      if (url.pathname.endsWith("/bondization.json")) {
+        return {
+          ok: true,
+          json: async () => ({
+            coupons: { columns: [], data: [] },
+            amortizations: { columns: [], data: [] },
+            offers: { columns: [], data: [] },
+          }),
+        };
+      }
+
+      if (
+        url.pathname ===
+        "/iss/engines/stock/markets/bonds/securities/RU000A_TEST.json"
+      ) {
+        return {
+          ok: true,
+          json: async () => ({
+            securities: {
+              columns: ["SECID", "BOARDID", "CURRENCYID", "ACCRUEDINT", "PREVPRICE"],
+              data: [["RU000A_TEST", "TQCB", "SUR", 12.34, 90]],
+            },
+            marketdata: {
+              columns: ["SECID", "BOARDID", "LAST", "VALUE", "NUMTRADES"],
+              data: [["RU000A_TEST", "TQCB", 91, 1000, 2]],
+            },
+          }),
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({
+          securities: {
+            columns: ["boardid", "matdate", "offerdate"],
+            data: [["TQCB", "2030-05-10", "2027-05-10"]],
+          },
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getBondDetails } = await import("./client");
+
+    await expect(getBondDetails(createBasicBond())).resolves.toMatchObject({
+      boardId: "TQCB",
+      shortName: "Тест",
+      cashFlowBoardId: "TQCB",
+      marketBoards: [
+        expect.objectContaining({ lastPrice: 91, accruedInterest: 12.34 }),
+      ],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const bondizationUrl = getFetchUrl(fetchMock, 0);
+    expect(bondizationUrl.pathname).toBe(
+      "/iss/securities/RU000A_TEST/bondization.json",
+    );
+    expectIssRequest(bondizationUrl, {
+      "iss.meta": "off",
+      "iss.only": "coupons,amortizations,offers",
+      limit: "unlimited",
+      "coupons.columns": "coupondate,value,valueprc,startdate",
+      "amortizations.columns": "amortdate,value,valueprc",
+      "offers.columns": "offerdate,price,value,offertype",
+    });
+    const boardsUrl = getFetchUrl(fetchMock, 1);
+    expect(boardsUrl.pathname).toBe(
+      "/iss/engines/stock/markets/bonds/securities/RU000A_TEST.json",
+    );
+    expectIssRequest(boardsUrl, {
+      "iss.meta": "off",
+      "iss.only": "securities,marketdata",
+      "securities.columns": "SECID,BOARDID,CURRENCYID,ACCRUEDINT,PREVPRICE",
+      "marketdata.columns": "SECID,BOARDID,LAST,VALUE,NUMTRADES",
+    });
+  });
+
   it("loads historical bond data for an exact trading date", async () => {
     const fetchMock = vi.fn(async (_url: URL): Promise<FetchResponse> => ({
       ok: true,
       json: async () => ({
         history: {
-          columns: [
-            "TRADEDATE",
-            "ACCINT",
-            "COUPONVALUE",
-            "COUPONPERCENT",
-            "FACEVALUE",
-          ],
-          data: [["2026-06-15", 23.07, 30.42, 6.1, 1000]],
+          columns: ["TRADEDATE", "ACCINT", "FACEVALUE"],
+          data: [["2026-06-15", 23.07, 1000]],
         },
       }),
     }));
@@ -185,8 +269,6 @@ describe("MOEX ISS client", () => {
     ).resolves.toEqual({
       tradeDate: "2026-06-15",
       accruedInterest: 23.07,
-      couponAmount: 30.42,
-      couponAnnualPercent: 6.1,
       faceValue: 1000,
     });
 
@@ -196,6 +278,53 @@ describe("MOEX ISS client", () => {
     );
     expect(url.searchParams.get("from")).toBe("2026-06-15");
     expect(url.searchParams.get("till")).toBe("2026-06-15");
+    expectIssRequest(url, {
+      "iss.meta": "off",
+      "iss.only": "history",
+      "history.columns": "TRADEDATE,ACCINT,FACEVALUE",
+      from: "2026-06-15",
+      till: "2026-06-15",
+    });
+  });
+
+  it("limits the legacy single-bond fallback to calculator fields", async () => {
+    const fetchMock = vi.fn(async (url: URL): Promise<FetchResponse> => {
+      const response = createSnapshotResponse();
+
+      if (url.pathname.endsWith("/securities.json")) {
+        response.securities.data = [];
+        response.marketdata.data = [];
+      } else {
+        response.securities.data = response.securities.data.filter(
+          (row) => row[0] === "SU26233RMFS5",
+        );
+        response.marketdata.data = response.marketdata.data.filter(
+          (row) => row[1] === "SU26233RMFS5",
+        );
+      }
+
+      return { ok: true, json: async () => response };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getBasicBondInfo } = await import("./client");
+
+    await expect(getBasicBondInfo({ secid: "SU26233RMFS5" })).resolves.toMatchObject({
+      secid: "SU26233RMFS5",
+      last_price: 59.538,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const url = getFetchUrl(fetchMock, 1);
+    expect(url.pathname).toBe(
+      "/iss/engines/stock/markets/bonds/securities/SU26233RMFS5.json",
+    );
+    expectIssRequest(url, {
+      "iss.meta": "off",
+      "iss.only": "securities,marketdata",
+      "securities.columns":
+        "SECID,BOARDID,SHORTNAME,COUPONVALUE,NEXTCOUPON,ACCRUEDINT,PREVPRICE,FACEVALUE,MATDATE,COUPONPERIOD,ISSUESIZE,FACEUNIT,ISIN,REGNUMBER,CURRENCYID,LISTLEVEL,COUPONPERCENT,OFFERDATE",
+      "marketdata.columns": "BOARDID,SECID,LAST",
+    });
   });
 });
 
@@ -210,15 +339,21 @@ function mockSnapshotFetch() {
   return fetchMock;
 }
 
-function getFetchUrl(fetchMock: ReturnType<typeof vi.fn>) {
-  const firstCall = fetchMock.mock.calls[0];
-  const url: unknown = firstCall?.[0];
+function getFetchUrl(fetchMock: ReturnType<typeof vi.fn>, callIndex = 0) {
+  const call = fetchMock.mock.calls[callIndex];
+  const url: unknown = call?.[0];
 
   if (!(url instanceof URL)) {
     throw new Error("Expected fetch to be called with a URL");
   }
 
   return url;
+}
+
+function expectIssRequest(url: URL, params: Record<string, string>) {
+  expect([...url.searchParams.entries()].sort()).toEqual(
+    Object.entries(params).sort(),
+  );
 }
 
 function createSnapshotResponse() {
@@ -357,5 +492,32 @@ function createSnapshotResponse() {
         ["TQOB", "TESTSLASH", 100],
       ],
     },
+  };
+}
+
+function createBasicBond(
+  overrides: Partial<BasicBondInfo> = {},
+): BasicBondInfo {
+  return {
+    shortname: "Тест",
+    secid: "RU000A_TEST",
+    isin: "RU000A000000",
+    board_id: "TQCB",
+    mat_date: "2030-05-10",
+    coupon_percent: 10,
+    list_level: 1,
+    coupon_value: 50,
+    coupon_date: "2026-12-15",
+    nkd: 12.34,
+    currency_id: "SUR",
+    face_unit: "SUR",
+    face_value: 1000,
+    coupon_period: 182,
+    issue_size: 1000,
+    offer_date: "2027-05-10",
+    prev_price: 100,
+    last_price: 100,
+    reg_number: "TEST",
+    ...overrides,
   };
 }

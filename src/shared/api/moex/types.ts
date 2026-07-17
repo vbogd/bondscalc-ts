@@ -19,6 +19,8 @@ export type BasicBondInfo = {
   shortname: string;
   secid: string;
   isin: string;
+  // MOEX: BOARDID, primary board for rows from the shared snapshot
+  board_id: string | null;
   // MOEX: MATDATE
   mat_date: LocalDate | null;
   // MOEX: COUPONPERCENT
@@ -61,6 +63,23 @@ export type BondBoard = {
   engine: string | null;
 };
 
+export type BondMarketBoard = {
+  // MOEX: BOARDID
+  boardId: string;
+  // Derived from the shared primary-board snapshot.
+  isPrimary: boolean;
+  // MOEX: CURRENCYID, trade settlement currency for this board.
+  currencyId: string;
+  // MOEX: ACCRUEDINT, accrued interest in this board's settlement currency.
+  accruedInterest: number | null;
+  // MOEX: PREVPRICE and marketdata LAST, both quoted on this board.
+  previousPrice: number | null;
+  lastPrice: number | null;
+  // MOEX marketdata: VALUE and NUMTRADES, used for liquidity display when needed.
+  value: number | null;
+  numberOfTrades: number | null;
+};
+
 export type BondOfferScheduleItem = {
   date: LocalDate;
   pricePercent: number | null;
@@ -84,8 +103,6 @@ export type BondAmortizationScheduleItem = {
 export type HistoricalBondSnapshot = {
   tradeDate: LocalDate;
   accruedInterest: number;
-  couponAmount: number | null;
-  couponAnnualPercent: number | null;
   faceValue: number | null;
 };
 
@@ -95,6 +112,10 @@ export type BondDetails = {
   shortName: string;
   name: string;
   boardId: string;
+  marketBoards: BondMarketBoard[];
+  // Board whose settlement currency matches FACEUNIT; its accrued interest is safe
+  // to combine with the bond's nominal, coupons, and amortizations.
+  cashFlowBoardId: string | null;
   maturityDate: LocalDate | null;
   nextOfferDate: LocalDate | null;
   offerSchedule: BondOfferScheduleItem[];

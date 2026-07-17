@@ -9,6 +9,7 @@ import {
   getBondDetails,
   getHistoricalBondSnapshot,
 } from "../shared/api/moex";
+import { getPrimaryBondSnapshot } from "../shared/api/moex/client";
 import {
   loadCalculatorPreferences,
   saveCalculatorPreferences,
@@ -17,18 +18,27 @@ import { CalculatorPage } from "./CalculatorPage";
 
 vi.mock("../shared/api/moex", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../shared/api/moex")>();
+  const getBasicBondInfo = vi.fn();
 
   return {
     ...actual,
-    getBasicBondInfo: vi.fn(),
+    getBasicBondInfo,
+    getPrimaryBondSnapshot: vi.fn(async () => [await getBasicBondInfo()]),
     getBondDetails: vi.fn(),
     getHistoricalBondSnapshot: vi.fn(),
   };
 });
 
+vi.mock("../shared/api/moex/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../shared/api/moex/client")>();
+
+  return { ...actual, getPrimaryBondSnapshot: vi.fn() };
+});
+
 const getBasicBondInfoMock = vi.mocked(getBasicBondInfo);
 const getBondDetailsMock = vi.mocked(getBondDetails);
 const getHistoricalBondSnapshotMock = vi.mocked(getHistoricalBondSnapshot);
+const getPrimaryBondSnapshotMock = vi.mocked(getPrimaryBondSnapshot);
 
 describe("CalculatorPage", () => {
   beforeEach(() => {
@@ -38,6 +48,10 @@ describe("CalculatorPage", () => {
     getBasicBondInfoMock.mockReset();
     getBondDetailsMock.mockReset();
     getHistoricalBondSnapshotMock.mockReset();
+    getPrimaryBondSnapshotMock.mockReset();
+    getPrimaryBondSnapshotMock.mockImplementation(async () => [
+      await getBasicBondInfoMock({ secid: "RU000A_TEST" }),
+    ]);
   });
 
   afterEach(() => {
@@ -145,13 +159,15 @@ describe("CalculatorPage", () => {
 
     expect(screen.getByText("Загружаем облигацию")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Тест 001" })).toBeInTheDocument();
-    expect(getBasicBondInfoMock).toHaveBeenCalledWith({ secid: "RU000A_TEST" });
-    expect(getBondDetailsMock).toHaveBeenCalledWith("RU000A_TEST");
+    expect(getBasicBondInfoMock).toHaveBeenCalled();
+    expect(getBondDetailsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ secid: "RU000A_TEST", board_id: "TQOB" }),
+    );
     expect(screen.queryByText("SECID")).not.toBeInTheDocument();
     expect(screen.queryByText("RU000A_TEST")).not.toBeInTheDocument();
     expect(screen.queryByText("Board")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Поиск облигаций" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Назад к поиску" })).toHaveAttribute(
+    expect(screen.queryByRole("button", { name: "Назад к поиску" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Открыть поиск облигаций" })).toHaveAttribute(
       "href",
       "/",
     );
@@ -227,6 +243,19 @@ describe("CalculatorPage", () => {
     ]);
     expect(screen.getByText("НКД покупки")).toBeInTheDocument();
     expect(screen.getByText("получено купонов")).toBeInTheDocument();
+  });
+
+  it("shows a back button when opened from search", async () => {
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    renderCalculatorPage({ fromSearch: true });
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    expect(screen.getByRole("button", { name: "Назад к поиску" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Открыть поиск облигаций" }),
+    ).not.toBeInTheDocument();
   });
 
   it("copies the ISIN from the issue header", async () => {
@@ -331,8 +360,6 @@ describe("CalculatorPage", () => {
     getHistoricalBondSnapshotMock.mockResolvedValue({
       tradeDate: "2026-06-10",
       accruedInterest: 7.5,
-      couponAmount: 50,
-      couponAnnualPercent: 10,
       faceValue: 1000,
     });
 
@@ -375,8 +402,6 @@ describe("CalculatorPage", () => {
     getHistoricalBondSnapshotMock.mockResolvedValue({
       tradeDate: "2026-06-10",
       accruedInterest: 7.5,
-      couponAmount: 50,
-      couponAnnualPercent: 10,
       faceValue: 900,
     });
 
@@ -396,6 +421,175 @@ describe("CalculatorPage", () => {
     });
   });
 
+  it("uses primary-board price and nominal-currency accrued interest for a USD bond", async () => {
+    getBasicBondInfoMock.mockResolvedValue(
+      createBond({
+        currency_id: "SUR",
+        face_unit: "USD",
+        nkd: 1314.96,
+        prev_price: 97,
+        last_price: 98,
+      }),
+    );
+    getBondDetailsMock.mockResolvedValue(
+      createDetails({
+        boardId: "TQCB",
+        cashFlowBoardId: "TQOD",
+        marketBoards: [
+          {
+            boardId: "TQCB",
+            isPrimary: true,
+            currencyId: "SUR",
+            accruedInterest: 1314.96,
+            previousPrice: 97,
+            lastPrice: 98,
+            value: 76751.74,
+            numberOfTrades: 40,
+          },
+          {
+            boardId: "TQOD",
+            isPrimary: false,
+            currencyId: "USD",
+            accruedInterest: 16.79,
+            previousPrice: null,
+            lastPrice: null,
+            value: null,
+            numberOfTrades: null,
+          },
+        ],
+      }),
+    );
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    const detailsCard = screen
+      .getByRole("heading", { name: "Детализация" })
+      .closest('[data-slot="card"]')!;
+
+    expect(screen.getByLabelText("цена, %")).toHaveValue("98");
+    expect(getDefinitionValue(detailsCard, "НКД покупки")).toBe("16,79 $");
+    expect(getDefinitionValue(detailsCard, "итого списано")).toContain("$");
+    expect(getDefinitionValue(detailsCard, "итого списано")).not.toContain("₽");
+  });
+
+  it("uses zero accrued interest and warns when MOEX has no nominal-currency board", async () => {
+    getBasicBondInfoMock.mockResolvedValue(
+      createBond({ currency_id: "SUR", face_unit: "EUR" }),
+    );
+    getBondDetailsMock.mockResolvedValue(
+      createDetails({
+        cashFlowBoardId: null,
+        marketBoards: [
+          {
+            boardId: "TQCB",
+            isPrimary: true,
+            currencyId: "SUR",
+            accruedInterest: 1109.47,
+            previousPrice: 87.01,
+            lastPrice: 86.9,
+            value: null,
+            numberOfTrades: null,
+          },
+        ],
+      }),
+    );
+
+    renderCalculatorPage();
+
+    const message = await screen.findByText(
+      /НКД в валюте номинала недоступен через MOEX API\./,
+    );
+    const alert = message.closest('[role="alert"]');
+    const detailsCard = screen
+      .getByRole("heading", { name: "Детализация" })
+      .closest('[data-slot="card"]')!;
+
+    if (!alert) {
+      throw new Error("Expected the missing accrued interest message inside an alert.");
+    }
+
+    expect(alert).toHaveClass("border-warning/25", "bg-warning/10", "text-warning");
+    expect(alert.parentElement?.parentElement).toHaveClass("w-full");
+    expect(message).toHaveClass("col-start-2", "w-full");
+    expect(alert.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(getDefinitionValue(detailsCard, "НКД покупки")).toBe("0,00 €");
+    expect(getDefinitionValue(detailsCard, "итого списано")).toContain("€");
+  });
+
+  it("does not substitute zero accrued interest for a ruble bond", async () => {
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(
+      createDetails({ cashFlowBoardId: null, marketBoards: [] }),
+    );
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    const detailsCard = screen
+      .getByRole("heading", { name: "Детализация" })
+      .closest('[data-slot="card"]')!;
+
+    expect(getDefinitionValue(detailsCard, "НКД покупки")).toBe("—");
+    expect(
+      screen.queryByText(
+        "НКД в валюте номинала недоступен через MOEX API.\nВ расчетах используется НКД равный 0.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the nominal-currency board for historical accrued interest", async () => {
+    getBasicBondInfoMock.mockResolvedValue(
+      createBond({ currency_id: "SUR", face_unit: "USD" }),
+    );
+    getBondDetailsMock.mockResolvedValue(
+      createDetails({
+        cashFlowBoardId: "TQOD",
+        marketBoards: [
+          {
+            boardId: "TQCB",
+            isPrimary: true,
+            currencyId: "SUR",
+            accruedInterest: 1300,
+            previousPrice: 98,
+            lastPrice: 98,
+            value: null,
+            numberOfTrades: null,
+          },
+          {
+            boardId: "TQOD",
+            isPrimary: false,
+            currencyId: "USD",
+            accruedInterest: 16.79,
+            previousPrice: null,
+            lastPrice: null,
+            value: null,
+            numberOfTrades: null,
+          },
+        ],
+      }),
+    );
+    getHistoricalBondSnapshotMock.mockResolvedValue({
+      tradeDate: "2026-06-10",
+      accruedInterest: 14.25,
+      faceValue: 1000,
+    });
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    fireEvent.change(screen.getByLabelText("дата сделки"), {
+      target: { value: "2026-06-10" },
+    });
+
+    await screen.findByText("14,25 $");
+    expect(getHistoricalBondSnapshotMock).toHaveBeenCalledWith({
+      secid: "RU000A_TEST",
+      boardId: "TQOD",
+      date: "2026-06-10",
+    });
+  });
+
   it("keeps edited inputs and the selected mode after a background MOEX update", async () => {
     const user = userEvent.setup();
     getBasicBondInfoMock.mockResolvedValue(createBond());
@@ -409,10 +603,26 @@ describe("CalculatorPage", () => {
       target: { value: "95" },
     });
     getBasicBondInfoMock.mockResolvedValue(createBond({ last_price: 80 }));
+    getBondDetailsMock.mockResolvedValue(
+      createDetails({
+        marketBoards: [
+          {
+            boardId: "TQOB",
+            isPrimary: true,
+            currencyId: "SUR",
+            accruedInterest: 12.34,
+            previousPrice: 80,
+            lastPrice: 80,
+            value: null,
+            numberOfTrades: null,
+          },
+        ],
+      }),
+    );
 
     await act(async () => {
       await queryClient.refetchQueries({
-        queryKey: ["bond-calculator", "RU000A_TEST"],
+        queryKey: ["moex", "primary-bond-snapshot"],
       });
     });
 
@@ -439,10 +649,26 @@ describe("CalculatorPage", () => {
       target: { value: "95" },
     });
     getBasicBondInfoMock.mockResolvedValue(createBond({ last_price: 80 }));
+    getBondDetailsMock.mockResolvedValue(
+      createDetails({
+        marketBoards: [
+          {
+            boardId: "TQOB",
+            isPrimary: true,
+            currencyId: "SUR",
+            accruedInterest: 12.34,
+            previousPrice: 80,
+            lastPrice: 80,
+            value: null,
+            numberOfTrades: null,
+          },
+        ],
+      }),
+    );
 
     await act(async () => {
       await queryClient.refetchQueries({
-        queryKey: ["bond-calculator", "RU000A_TEST"],
+        queryKey: ["moex", "primary-bond-snapshot"],
       });
     });
     await user.click(
@@ -475,7 +701,7 @@ describe("CalculatorPage", () => {
 
     await act(async () => {
       await queryClient.refetchQueries({
-        queryKey: ["bond-calculator", "RU000A_TEST"],
+        queryKey: ["moex", "primary-bond-snapshot"],
       });
     });
 
@@ -518,7 +744,11 @@ describe("CalculatorPage", () => {
     );
 
     expect(warning).toBeInTheDocument();
-    expect(warning).toHaveClass("text-muted-foreground");
+    expect(warning.closest('[role="alert"]')).toHaveClass(
+      "border-warning/25",
+      "bg-warning/10",
+      "text-warning",
+    );
   });
 
   it("counts unknown amortization amounts as zero and warns about it", async () => {
@@ -543,7 +773,7 @@ describe("CalculatorPage", () => {
   });
 });
 
-function renderCalculatorPage() {
+function renderCalculatorPage(state?: { fromSearch: true }) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -554,7 +784,11 @@ function renderCalculatorPage() {
 
   const renderResult = render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/bond/RU000A_TEST"]}>
+      <MemoryRouter
+        initialEntries={[
+          { pathname: "/bond/RU000A_TEST", state },
+        ]}
+      >
         <Routes>
           <Route path="/bond/:secid" element={<CalculatorPage />} />
         </Routes>
@@ -578,6 +812,7 @@ function createBond(overrides: Partial<BasicBondInfo> = {}): BasicBondInfo {
     shortname: "Тест 001",
     secid: "RU000A_TEST",
     isin: "RU000A000000",
+    board_id: "TQOB",
     mat_date: "2030-06-15",
     coupon_percent: 10,
     list_level: 1,
@@ -604,6 +839,19 @@ function createDetails(overrides: Partial<BondDetails> = {}): BondDetails {
     shortName: "Тест 001",
     name: "Тестовая облигация",
     boardId: "TQOB",
+    marketBoards: [
+      {
+        boardId: "TQOB",
+        isPrimary: true,
+        currencyId: "SUR",
+        accruedInterest: 12.34,
+        previousPrice: 90,
+        lastPrice: null,
+        value: null,
+        numberOfTrades: null,
+      },
+    ],
+    cashFlowBoardId: "TQOB",
     maturityDate: "2030-06-15",
     nextOfferDate: "2027-06-15",
     offerSchedule: [

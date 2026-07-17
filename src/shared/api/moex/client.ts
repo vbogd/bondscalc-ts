@@ -11,7 +11,6 @@ import type { BasicBondInfo, BondDetails, HistoricalBondSnapshot, LocalDate } fr
 const MOEX_ISS_BASE_URL = "https://iss.moex.com/iss";
 const DEFAULT_SEARCH_LIMIT = 100;
 const MAX_BOND_SEARCH_QUERY_LENGTH = 100;
-const PRIMARY_BOND_SNAPSHOT_TTL_MS = 60_000;
 const PRIMARY_BOND_SECURITY_COLUMNS = [
   "SECID",
   "BOARDID",
@@ -33,14 +32,41 @@ const PRIMARY_BOND_SECURITY_COLUMNS = [
   "OFFERDATE",
 ].join(",");
 const PRIMARY_BOND_MARKETDATA_COLUMNS = ["BOARDID", "SECID", "LAST"].join(",");
+const BOND_MARKET_BOARD_SECURITY_COLUMNS = [
+  "SECID",
+  "BOARDID",
+  "CURRENCYID",
+  "ACCRUEDINT",
+  "PREVPRICE",
+].join(",");
+const BOND_MARKET_BOARD_MARKETDATA_COLUMNS = [
+  "SECID",
+  "BOARDID",
+  "LAST",
+  "VALUE",
+  "NUMTRADES",
+].join(",");
 
-let primaryBondSnapshotCache:
-  | {
-      expiresAt: number;
-      promise: Promise<BasicBondInfo[]>;
-    }
-  | null = null;
+/**
+ * Loads the complete primary-board bond snapshot for local search and calculator defaults.
+ * It requests only securities calculator/search fields and marketdata BOARDID, SECID, LAST;
+ * the result is deliberately uncached because React Query owns freshness and deduplication.
+ */
+export async function getPrimaryBondSnapshot(): Promise<BasicBondInfo[]> {
+  return moexFetchJson("/engines/stock/markets/bonds/securities.json", {
+    "iss.json": "compact",
+    "iss.dp": "dot",
+    "iss.only": "securities,marketdata",
+    primary_board: "1",
+    "securities.columns": PRIMARY_BOND_SECURITY_COLUMNS,
+    "marketdata.columns": PRIMARY_BOND_MARKETDATA_COLUMNS,
+  }).then(normalizePrimaryBondSnapshot);
+}
 
+/**
+ * Loads the primary-board snapshot and filters it for callers outside React Query.
+ * SearchPage uses searchPrimaryBondSnapshot instead so filtering never triggers HTTP.
+ */
 export async function searchBasicBondInfo(
   query: string,
   limit = DEFAULT_SEARCH_LIMIT,
@@ -54,6 +80,10 @@ export async function searchBasicBondInfo(
   return searchPrimaryBondSnapshot(await getPrimaryBondSnapshot(), normalizedQuery, limit);
 }
 
+/**
+ * Checks whether a query has enough ordinary characters for a local bond search.
+ * It accepts the same escaped glob syntax used by SearchPage.
+ */
 export function isBondSearchQueryValid(query: string): boolean {
   const normalizedQuery = query.trim();
   const pattern = parseGlobPattern(normalizedQuery);
@@ -67,6 +97,11 @@ export function isBondSearchQueryValid(query: string): boolean {
 
 export { MAX_BOND_SEARCH_QUERY_LENGTH };
 
+/**
+ * Loads one bond's basic data, preferring the primary-board snapshot for legacy callers.
+ * Its fallback requests only securities calculator fields and marketdata BOARDID, SECID, LAST
+ * when the shared snapshot has no matching SECID.
+ */
 export async function getBasicBondInfo({
   secid,
   preferredBoardIds = [],
@@ -88,6 +123,11 @@ export async function getBasicBondInfo({
       `/engines/stock/markets/bonds/securities/${encodeURIComponent(
         normalizedSecid,
       )}.json`,
+      {
+        "iss.only": "securities,marketdata",
+        "securities.columns": PRIMARY_BOND_SECURITY_COLUMNS,
+        "marketdata.columns": PRIMARY_BOND_MARKETDATA_COLUMNS,
+      },
     ),
     preferredBoardIds,
   });
@@ -99,63 +139,42 @@ export async function getBasicBondInfo({
   return bond;
 }
 
-async function getPrimaryBondSnapshot(): Promise<BasicBondInfo[]> {
-  const now = Date.now();
-
-  if (primaryBondSnapshotCache && primaryBondSnapshotCache.expiresAt > now) {
-    return primaryBondSnapshotCache.promise;
-  }
-
-  primaryBondSnapshotCache = {
-    expiresAt: now + PRIMARY_BOND_SNAPSHOT_TTL_MS,
-    promise: moexFetchJson("/engines/stock/markets/bonds/securities.json", {
-      "iss.json": "compact",
-      "iss.dp": "dot",
-      "iss.only": "securities,marketdata",
-      primary_board: "1",
-      "securities.columns": PRIMARY_BOND_SECURITY_COLUMNS,
-      "marketdata.columns": PRIMARY_BOND_MARKETDATA_COLUMNS,
-    }).then(normalizePrimaryBondSnapshot),
-  };
-
-  return primaryBondSnapshotCache.promise;
-}
-
-export async function getBondDetails(secid: string): Promise<BondDetails> {
-  const normalizedSecid = secid.trim().toUpperCase();
-
-  const [searchResponse, securityResponse, marketResponse, bondizationResponse] =
-    await Promise.all([
-      moexFetchJson("/securities.json", {
-        q: normalizedSecid,
-        engine: "stock",
-        market: "bonds",
-        is_trading: "1",
-      }),
-      moexFetchJson(`/securities/${encodeURIComponent(normalizedSecid)}.json`),
-      moexFetchJson(
-        `/engines/stock/markets/bonds/securities/${encodeURIComponent(
-          normalizedSecid,
-        )}.json`,
-      ),
-      moexFetchJson(`/securities/${encodeURIComponent(normalizedSecid)}/bondization.json`, {
-        "iss.only": "coupons,amortizations,offers",
-        limit: "unlimited",
-        "coupons.columns": "coupondate,value,valueprc,startdate",
-        "amortizations.columns": "amortdate,value,valueprc",
-        "offers.columns": "offerdate,price,value,offertype",
-      }),
-    ]);
+/**
+ * Loads schedules and board-specific calculator data for one bond.
+ * Prices and liquidity remain on the primary board, while accrued interest is selected later
+ * from the board whose settlement currency matches FACEUNIT; no currency conversion is made.
+ */
+export async function getBondDetails(bond: BasicBondInfo): Promise<BondDetails> {
+  const normalizedSecid = bond.secid.trim().toUpperCase();
+  const [bondizationResponse, marketBoardsResponse] = await Promise.all([
+    moexFetchJson(`/securities/${encodeURIComponent(normalizedSecid)}/bondization.json`, {
+      "iss.only": "coupons,amortizations,offers",
+      limit: "unlimited",
+      "coupons.columns": "coupondate,value,valueprc,startdate",
+      "amortizations.columns": "amortdate,value,valueprc",
+      "offers.columns": "offerdate,price,value,offertype",
+    }),
+    moexFetchJson(
+      `/engines/stock/markets/bonds/securities/${encodeURIComponent(normalizedSecid)}.json`,
+      {
+        "iss.only": "securities,marketdata",
+        "securities.columns": BOND_MARKET_BOARD_SECURITY_COLUMNS,
+        "marketdata.columns": BOND_MARKET_BOARD_MARKETDATA_COLUMNS,
+      },
+    ),
+  ]);
 
   return normalizeBondDetailsResponses({
-    secid: normalizedSecid,
-    searchResponse,
-    securityResponse,
-    marketResponse,
+    bond: { ...bond, secid: normalizedSecid },
     bondizationResponse,
+    marketBoardsResponse,
   });
 }
 
+/**
+ * Loads TRADEDATE, ACCINT, and FACEVALUE for one bond on an exact historical trading date.
+ * The calculator uses it only when the user chooses a past purchase date.
+ */
 export async function getHistoricalBondSnapshot({
   secid,
   boardId,
@@ -175,8 +194,7 @@ export async function getHistoricalBondSnapshot({
       from: date,
       till: date,
       "iss.only": "history",
-      "history.columns":
-        "TRADEDATE,ACCINT,COUPONVALUE,COUPONPERCENT,FACEVALUE",
+      "history.columns": "TRADEDATE,ACCINT,FACEVALUE",
     },
   );
   const snapshot = normalizeHistoricalBondSnapshot(response);
@@ -209,10 +227,14 @@ async function moexFetchJson(
   return response.json();
 }
 
-function searchPrimaryBondSnapshot(
+/**
+ * Filters an already loaded primary-board snapshot for local substring or glob search.
+ * It performs no network request and returns at most the requested number of bonds.
+ */
+export function searchPrimaryBondSnapshot(
   bonds: BasicBondInfo[],
   query: string,
-  limit: number,
+  limit = DEFAULT_SEARCH_LIMIT,
 ): BasicBondInfo[] {
   const searchQuery = getBondSearchQuery(query);
 

@@ -5,11 +5,13 @@ import {
   normalizeBondAmortizationSchedule,
   normalizeBondCouponSchedule,
   normalizeBondDetails,
+  normalizeBondMarketBoards,
   normalizeHistoricalBondSnapshot,
   normalizeBondOfferSchedule,
   normalizeBondSearchRefs,
   normalizePrimaryBondSnapshot,
   selectBondBoardId,
+  selectCashFlowBondBoard,
 } from ".";
 import type { BondBoard } from "./types";
 
@@ -83,6 +85,7 @@ describe("normalizeBasicBondInfo", () => {
       shortname: "ОФЗ 26233",
       secid: "SU26233RMFS5",
       isin: "RU000A101F94",
+      board_id: null,
       mat_date: "2035-07-18",
       coupon_percent: 6.1,
       list_level: 1,
@@ -115,6 +118,8 @@ describe("primary bond snapshot normalization", () => {
         SECID: "SU26233RMFS5",
         PREVPRICE: 59.344,
         LAST: 59.538,
+        VALUE: null,
+        NUMTRADES: null,
       },
     ]);
   });
@@ -174,10 +179,95 @@ describe("primary bond snapshot normalization", () => {
     ).toEqual([
       expect.objectContaining({
         secid: "SU26233RMFS5",
+        board_id: "TQOB",
         prev_price: 59.344,
         last_price: 59.538,
       }),
     ]);
+  });
+});
+
+describe("bond board currency selection", () => {
+  it("keeps primary-board price while choosing USD accrued interest by currency", () => {
+    const boards = normalizeBondMarketBoards({
+      primaryBoardId: "TQCB",
+      securityRows: [
+        {
+          secid: "RU000A107B43",
+          boardid: "TQCB",
+          currencyid: "SUR",
+          accruedint: 1314.96,
+          prevprice: 97,
+        },
+        {
+          secid: "RU000A107B43",
+          boardid: "TQOD",
+          currencyid: "USD",
+          accruedint: 16.79,
+          prevprice: null,
+        },
+      ],
+      marketDataRows: [
+        {
+          secid: "RU000A107B43",
+          boardid: "TQCB",
+          last: 98,
+          value: 76751.74,
+          numtrades: 40,
+        },
+        {
+          secid: "RU000A107B43",
+          boardid: "TQOD",
+          last: null,
+          value: null,
+          numtrades: null,
+        },
+      ],
+    });
+
+    expect(boards.find((board) => board.isPrimary)).toMatchObject({
+      boardId: "TQCB",
+      currencyId: "SUR",
+      lastPrice: 98,
+      accruedInterest: 1314.96,
+    });
+    expect(selectCashFlowBondBoard({ boards, faceUnit: "USD" })).toMatchObject({
+      boardId: "TQOD",
+      currencyId: "USD",
+      accruedInterest: 16.79,
+    });
+  });
+
+  it.each(["EUR", "CNY"]) (
+    "selects the %s board without relying on its board ID",
+    (faceUnit) => {
+      const boards = normalizeBondMarketBoards({
+        primaryBoardId: "PRIMARY",
+        securityRows: [
+          { boardid: "PRIMARY", currencyid: "SUR", accruedint: 100 },
+          { boardid: "ANY_BOARD", currencyid: faceUnit, accruedint: 2.5 },
+        ],
+        marketDataRows: [],
+      });
+
+      expect(selectCashFlowBondBoard({ boards, faceUnit })).toMatchObject({
+        boardId: "ANY_BOARD",
+        accruedInterest: 2.5,
+      });
+    },
+  );
+
+  it("treats SUR and RUB as the same ruble currency", () => {
+    const boards = normalizeBondMarketBoards({
+      primaryBoardId: "TQOB",
+      securityRows: [{ boardid: "TQOB", currencyid: "SUR", accruedint: 22.4 }],
+      marketDataRows: [],
+    });
+
+    expect(selectCashFlowBondBoard({ boards, faceUnit: "RUB" })).toMatchObject({
+      boardId: "TQOB",
+      accruedInterest: 22.4,
+    });
   });
 });
 
@@ -296,8 +386,6 @@ describe("bond cash flow schedule normalization", () => {
     ).toEqual({
       tradeDate: "2026-06-10",
       accruedInterest: 22.4,
-      couponAmount: 30.42,
-      couponAnnualPercent: 6.1,
       faceValue: 1000,
     });
   });
@@ -354,6 +442,8 @@ describe("normalizeBondDetails", () => {
       shortName: "Тест",
       name: "Тестовая облигация",
       boardId: "TQCB",
+      marketBoards: [],
+      cashFlowBoardId: null,
       maturityDate: "2030-05-10",
       nextOfferDate: "2027-05-10",
       offerSchedule: [

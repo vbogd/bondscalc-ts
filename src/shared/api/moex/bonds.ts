@@ -12,6 +12,7 @@ import type {
   BondCouponScheduleItem,
   BondDetails,
   BondListLevel,
+  BondMarketBoard,
   BondOfferScheduleItem,
   BondSearchRef,
   HistoricalBondSnapshot,
@@ -21,14 +22,12 @@ import type {
 export const MIN_BOND_SEARCH_QUERY_LENGTH = 3;
 
 const BOARD_PRIORITY = [
-  "TQOB",
-  "TQCB",
-  "TQIR",
-  "TQOD",
-  "TQOE",
-  "TQOY",
-  "TQIF",
-  "TQTF",
+  "TQOB", // гособлигации
+  "TQCB", // облигации
+  "TQIR", // облигации ПИР
+  "TQOD", // облигации в USD
+  "TQOE", // облигации в EUR
+  "TQOY", // облигации в CNY
 ];
 
 export function normalizeBondSearchRefs(rows: IssRow[]): BondSearchRef[] {
@@ -99,6 +98,7 @@ export function normalizeBasicBondInfo(row: IssRow): BasicBondInfo | null {
     shortname,
     secid,
     isin,
+    board_id: getString(row, "boardid"),
     mat_date: getLocalDate(row, "matdate"),
     coupon_percent: getNumber(row, "couponpercent"),
     list_level: listLevel,
@@ -142,9 +142,55 @@ export function mergeMarketDataRows({
       ? {
           ...securityRow,
           LAST: getNumber(marketDataRow, "last"),
+          VALUE: getNumber(marketDataRow, "value"),
+          NUMTRADES: getNumber(marketDataRow, "numtrades"),
         }
       : securityRow;
   });
+}
+
+export function normalizeBondMarketBoards({
+  securityRows,
+  marketDataRows,
+  primaryBoardId,
+}: {
+  securityRows: IssRow[];
+  marketDataRows: IssRow[];
+  primaryBoardId: string;
+}): BondMarketBoard[] {
+  return mergeMarketDataRows({ securityRows, marketDataRows })
+    .map((row) => {
+      const boardId = getString(row, "boardid");
+      const currencyId = getString(row, "currencyid");
+
+      if (!boardId || !currencyId) {
+        return null;
+      }
+
+      return {
+        boardId,
+        isPrimary: boardId === primaryBoardId,
+        currencyId,
+        accruedInterest: getNumber(row, "accruedint"),
+        previousPrice: getNumber(row, "prevprice"),
+        lastPrice: getNumber(row, "last"),
+        value: getNumber(row, "value"),
+        numberOfTrades: getNumber(row, "numtrades"),
+      };
+    })
+    .filter((board): board is BondMarketBoard => board !== null);
+}
+
+export function selectCashFlowBondBoard({
+  boards,
+  faceUnit,
+}: {
+  boards: BondMarketBoard[];
+  faceUnit: string;
+}): BondMarketBoard | null {
+  return (
+    boards.find((board) => currenciesMatch(board.currencyId, faceUnit)) ?? null
+  );
 }
 
 export function normalizeBondBoards(rows: IssRow[]): BondBoard[] {
@@ -283,8 +329,6 @@ export function normalizeHistoricalBondSnapshot(
   return {
     tradeDate,
     accruedInterest,
-    couponAmount: getNumber(row, "couponvalue"),
-    couponAnnualPercent: getNumber(row, "couponpercent"),
     faceValue: getNumber(row, "facevalue"),
   };
 }
@@ -292,6 +336,7 @@ export function normalizeHistoricalBondSnapshot(
 export function normalizeBondDetails({
   secid,
   searchResult,
+  primaryBoardId,
   descriptionRows,
   boardRows,
   marketSecurityRows,
@@ -301,6 +346,7 @@ export function normalizeBondDetails({
 }: {
   secid: string;
   searchResult: BondSearchRef | null;
+  primaryBoardId?: string | null;
   descriptionRows: IssRow[];
   boardRows: IssRow[];
   marketSecurityRows: IssRow[];
@@ -315,7 +361,7 @@ export function normalizeBondDetails({
   );
   const boards = normalizeBondBoards(boardRows);
   const boardId = selectBondBoardId({
-    primaryBoardId: searchResult?.primaryBoardId ?? null,
+    primaryBoardId: primaryBoardId ?? searchResult?.primaryBoardId ?? null,
     marketPriceBoardId: searchResult?.marketPriceBoardId ?? null,
     boards,
   });
@@ -344,6 +390,8 @@ export function normalizeBondDetails({
       getString(selectedMarketSecurity ?? {}, "secname") ??
       secid,
     boardId,
+    marketBoards: [],
+    cashFlowBoardId: null,
     maturityDate:
       getLocalDate(selectedMarketSecurity ?? {}, "matdate") ??
       normalizeDescriptionDate(description.MATDATE),
@@ -366,7 +414,10 @@ export function normalizeBasicBondInfoResponse({
   preferredBoardIds?: (string | null)[];
 }): BasicBondInfo | null {
   return normalizeBasicBondInfoFromRows({
-    rows: normalizeTableFromResponse(response, "securities"),
+    rows: mergeMarketDataRows({
+      securityRows: normalizeTableFromResponse(response, "securities"),
+      marketDataRows: normalizeTableFromResponse(response, "marketdata"),
+    }),
     preferredBoardIds,
   });
 }
@@ -381,33 +432,59 @@ export function normalizePrimaryBondSnapshot(response: unknown): BasicBondInfo[]
 }
 
 export function normalizeBondDetailsResponses({
-  secid,
-  searchResponse,
-  securityResponse,
-  marketResponse,
+  bond,
   bondizationResponse,
+  marketBoardsResponse,
 }: {
-  secid: string;
-  searchResponse: unknown;
-  securityResponse: unknown;
-  marketResponse: unknown;
+  bond: BasicBondInfo;
   bondizationResponse: unknown;
+  marketBoardsResponse: unknown;
 }): BondDetails {
-  const searchResult =
-    normalizeBondSearchRefsResponse(searchResponse).find(
-      (bond) => bond.secid === secid,
-    ) ?? null;
+  if (!bond.board_id) {
+    throw new Error(`MOEX did not return a primary board for ${bond.secid}`);
+  }
 
-  return normalizeBondDetails({
-    secid,
-    searchResult,
-    descriptionRows: normalizeTableFromResponse(securityResponse, "description"),
-    boardRows: normalizeTableFromResponse(securityResponse, "boards"),
-    marketSecurityRows: normalizeTableFromResponse(marketResponse, "securities"),
-    offerRows: normalizeTableFromResponse(bondizationResponse, "offers"),
-    couponRows: normalizeTableFromResponse(bondizationResponse, "coupons"),
-    amortizationRows: normalizeTableFromResponse(bondizationResponse, "amortizations"),
+  const marketBoards = normalizeBondMarketBoards({
+    securityRows: normalizeTableFromResponse(marketBoardsResponse, "securities"),
+    marketDataRows: normalizeTableFromResponse(marketBoardsResponse, "marketdata"),
+    primaryBoardId: bond.board_id,
   });
+  const cashFlowBoard = selectCashFlowBondBoard({
+    boards: marketBoards,
+    faceUnit: bond.face_unit,
+  });
+
+  return {
+    secid: bond.secid,
+    isin: bond.isin,
+    shortName: bond.shortname,
+    name: bond.shortname,
+    boardId: bond.board_id,
+    marketBoards,
+    cashFlowBoardId: cashFlowBoard?.boardId ?? null,
+    maturityDate: bond.mat_date,
+    nextOfferDate: bond.offer_date,
+    offerSchedule: normalizeBondOfferSchedule(
+      normalizeTableFromResponse(bondizationResponse, "offers"),
+    ),
+    couponSchedule: normalizeBondCouponSchedule(
+      normalizeTableFromResponse(bondizationResponse, "coupons"),
+    ),
+    amortizationSchedule: normalizeBondAmortizationSchedule(
+      normalizeTableFromResponse(bondizationResponse, "amortizations"),
+    ),
+  };
+}
+
+function currenciesMatch(left: string, right: string): boolean {
+  const normalizedLeft = left.trim().toUpperCase();
+  const normalizedRight = right.trim().toUpperCase();
+
+  return (
+    normalizedLeft === normalizedRight ||
+    (normalizedLeft === "SUR" && normalizedRight === "RUB") ||
+    (normalizedLeft === "RUB" && normalizedRight === "SUR")
+  );
 }
 
 function selectMarketSecurityRow(

@@ -159,7 +159,11 @@ export function ResultPanel({
         {controls ? <div className="w-full sm:w-auto">{controls}</div> : null}
       </CardHeader>
       <CardContent>{children}</CardContent>
-      {footer ? <CardFooter>{footer}</CardFooter> : null}
+      {footer ? (
+        <CardFooter>
+          <div className="w-full">{footer}</div>
+        </CardFooter>
+      ) : null}
     </Card>
   );
 }

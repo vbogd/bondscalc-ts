@@ -5,19 +5,29 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BasicBondInfo } from "../shared/api/moex";
 import { searchBasicBondInfo } from "../shared/api/moex";
+import { getPrimaryBondSnapshot } from "../shared/api/moex/client";
 import { loadSearchQuery, saveSearchQuery } from "../shared/persistence";
 import { SearchPage } from "./SearchPage";
 
 vi.mock("../shared/api/moex", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../shared/api/moex")>();
+  const searchBasicBondInfo = vi.fn();
 
   return {
     ...actual,
-    searchBasicBondInfo: vi.fn(),
+    searchBasicBondInfo,
+    getPrimaryBondSnapshot: vi.fn(async () => searchBasicBondInfo()),
   };
 });
 
+vi.mock("../shared/api/moex/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../shared/api/moex/client")>();
+
+  return { ...actual, getPrimaryBondSnapshot: vi.fn() };
+});
+
 const searchBasicBondInfoMock = vi.mocked(searchBasicBondInfo);
+const getPrimaryBondSnapshotMock = vi.mocked(getPrimaryBondSnapshot);
 
 describe("SearchPage", () => {
   beforeEach(() => {
@@ -25,6 +35,10 @@ describe("SearchPage", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 6, 16, 12));
     searchBasicBondInfoMock.mockReset();
+    getPrimaryBondSnapshotMock.mockReset();
+    getPrimaryBondSnapshotMock.mockImplementation(async () =>
+      searchBasicBondInfoMock(""),
+    );
   });
 
   afterEach(() => {
@@ -40,7 +54,21 @@ describe("SearchPage", () => {
 
     expect(screen.getByRole("searchbox", { name: "Поиск" })).toHaveValue("26233");
     expect(await screen.findByText("Ничего не найдено")).toBeInTheDocument();
-    expect(searchBasicBondInfoMock).toHaveBeenCalledWith("26233");
+    expect(searchBasicBondInfoMock).toHaveBeenCalled();
+  });
+
+  it("filters a loaded snapshot locally without another MOEX request", async () => {
+    const user = userEvent.setup();
+    searchBasicBondInfoMock.mockResolvedValue([createBond()]);
+
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "262");
+    await screen.findByRole("heading", { name: "ОФЗ 26233" });
+    await user.clear(screen.getByRole("searchbox", { name: "Поиск" }));
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "101");
+
+    expect(getPrimaryBondSnapshotMock).toHaveBeenCalledTimes(1);
   });
 
   it("persists the search query as it changes", async () => {
@@ -112,12 +140,12 @@ describe("SearchPage", () => {
     ]);
     renderSearchPage();
 
-    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "rzd");
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "ржд");
 
     expect(searchBasicBondInfoMock).not.toHaveBeenCalled();
     expect(screen.getByText("Ищем облигации")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "РЖД 001P-25R" })).toBeInTheDocument();
-    expect(searchBasicBondInfoMock).toHaveBeenCalledWith("rzd");
+    expect(searchBasicBondInfoMock).toHaveBeenCalled();
     expect(screen.getByRole("link", { name: /РЖД 001P-25R/i })).toHaveAttribute(
       "href",
       "/bond/RZD001P25R",
@@ -166,7 +194,7 @@ describe("SearchPage", () => {
     ]);
     renderSearchPage();
 
-    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "rzd");
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "ржд");
 
     expect(await screen.findByText("Листинг 2")).toHaveClass(
       "border-success/25",
@@ -186,7 +214,7 @@ describe("SearchPage", () => {
     ]);
     renderSearchPage();
 
-    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "rzd");
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "ржд");
 
     expect(await screen.findByText("Листинг 3")).toHaveClass(
       "border-warning/25",
@@ -400,6 +428,7 @@ function createBond(overrides: Partial<BasicBondInfo> = {}): BasicBondInfo {
     shortname: "ОФЗ 26233",
     secid: "SU26233RMFS5",
     isin: "RU000A101F94",
+    board_id: "TQOB",
     mat_date: "2035-07-18",
     coupon_percent: 6.1,
     list_level: 1,
