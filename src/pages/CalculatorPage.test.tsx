@@ -204,7 +204,7 @@ describe("CalculatorPage", () => {
           .querySelectorAll("dt"),
         (element) => element.firstChild?.textContent,
       ),
-    ).toEqual(["погашение", "дата купона", "купон", "оферта"]);
+    ).toEqual(["погашение", "оферта", "дата купона", "купон"]);
     expect(screen.getByText("* по данным MOEX")).toHaveClass(
       "text-right",
       "text-xs",
