@@ -621,16 +621,16 @@ export function CalculatorPage() {
                     value={formatLocalDate(targetDates.maturityDate)}
                   />
                   <ResultRow
+                    label="оферта"
+                    value={formatLocalDate(targetDates.offerDate)}
+                  />
+                  <ResultRow
                     label="дата купона"
                     value={formatLocalDate(data.basicInfo.coupon_date)}
                   />
                   <ResultRow
                     label="купон"
                     value={formatMoney(data.basicInfo.coupon_value, data.basicInfo.face_unit)}
-                  />
-                  <ResultRow
-                    label="оферта"
-                    value={formatLocalDate(targetDates.offerDate)}
                   />
                 </dl>
                 <p className="mt-3 text-right text-xs text-muted-foreground">
@@ -1061,20 +1061,20 @@ function createCalculationView({
             value: formatMoney(result.exitCleanAmount, currency),
           },
           {
-            label: "НКД продажи",
-            value: formatMoney(result.exitAccruedInterest, currency),
+            label: "амортизация за период",
+            value: formatMoney(result.amortizationsReceived, currency),
           },
           {
-            label: "комиссия продажи",
-            value: formatMoney(result.exitCommission, currency),
+            label: "НКД продажи",
+            value: formatMoney(result.exitAccruedInterest, currency),
           },
           {
             label: "получено купонов",
             value: formatMoney(result.couponsReceived, currency),
           },
           {
-            label: "амортизация за период",
-            value: formatMoney(result.amortizationsReceived, currency),
+            label: "комиссия продажи",
+            value: formatMoney(result.exitCommission, currency),
           },
           {
             label: "итого получено",
@@ -1084,7 +1084,7 @@ function createCalculationView({
         ],
       },
       {
-        title: "Налог и результат",
+        title: "Результат и налог",
         rows: [
           {
             label: "прибыль до налога",
@@ -1092,10 +1092,6 @@ function createCalculationView({
             valueTone: getProfitTone(result.profitBeforeTax),
           },
           { label: "налог", value: formatMoney(result.tax, currency) },
-          {
-            label: "купонный эффект",
-            value: formatMoney(result.couponEffect, currency),
-          },
         ],
       },
     ],
@@ -1341,19 +1337,18 @@ function createEmptyCalculationView(
         title: "Продажа",
         rows: [
           { label: "чистая цена", value: "—" },
-          { label: "НКД продажи", value: "—" },
-          { label: "комиссия продажи", value: "—" },
-          { label: "получено купонов", value: "—" },
           { label: "амортизация за период", value: "—" },
+          { label: "НКД продажи", value: "—" },
+          { label: "получено купонов", value: "—" },
+          { label: "комиссия продажи", value: "—" },
           { label: "итого получено", value: "—", strong: true },
         ],
       },
       {
-        title: "Налог и результат",
+        title: "Результат и налог",
         rows: [
           { label: "прибыль до налога", value: "—" },
           { label: "налог", value: "—" },
-          { label: "купонный эффект", value: "—" },
         ],
       },
     ],

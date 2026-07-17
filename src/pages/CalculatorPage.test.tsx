@@ -349,6 +349,22 @@ describe("CalculatorPage", () => {
       "прибыль",
       "срок, дней",
     ]);
+    expect(
+      Array.from(
+        screen
+          .getByRole("heading", { name: "Продажа" })
+          .parentElement!
+          .querySelectorAll("dt"),
+        (element) => element.firstChild?.textContent,
+      ),
+    ).toEqual([
+      "чистая цена",
+      "амортизация за период",
+      "НКД продажи",
+      "получено купонов",
+      "комиссия продажи",
+      "итого получено",
+    ]);
     expect(screen.getByText("НКД продажи")).toBeInTheDocument();
     expect(screen.queryByText("купоны, оценка")).not.toBeInTheDocument();
   });
