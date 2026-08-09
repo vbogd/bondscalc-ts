@@ -369,6 +369,20 @@ describe("CalculatorPage", () => {
     expect(screen.queryByText("купоны, оценка")).not.toBeInTheDocument();
   });
 
+  it("recalculates yield after editing the coupon rate", async () => {
+    const user = userEvent.setup();
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    await user.clear(screen.getByLabelText("купон, % год"));
+    await user.type(screen.getByLabelText("купон, % год"), "50");
+
+    expect(screen.getByText("48,33 %")).toBeInTheDocument();
+  });
+
   it("uses today as the sale date when the buy date is in the past", async () => {
     const user = userEvent.setup();
     getBasicBondInfoMock.mockResolvedValue(createBond());

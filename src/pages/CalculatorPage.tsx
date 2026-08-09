@@ -940,6 +940,10 @@ function createCalculationView({
   const sellPrice = parseDecimal(form.sellPrice);
   const days = getDaysBetween(form.buyDate, form.sellDate);
   const currentYieldPercent = calculateCurrentYieldFromForm(form);
+  const couponAnnualPercentOverride =
+    couponPercent !== null && couponPercent !== bond?.coupon_percent
+      ? couponPercent
+      : null;
   const warningAlert =
     accruedInterestMessage === MISSING_NOMINAL_CURRENCY_ACCRUED_INTEREST_MESSAGE
       ? accruedInterestMessage
@@ -981,6 +985,7 @@ function createCalculationView({
     exitDate: form.sellDate,
     currentNominal: faceValue,
     fallbackCouponPeriodDays: bond.coupon_period,
+    couponAnnualPercentOverride,
   });
   const exitAccrualTerms = getExitAccrualTerms({
     schedule: details.couponSchedule,
@@ -1001,7 +1006,9 @@ function createCalculationView({
     taxPercent,
     couponAnnualPercent: couponPercent,
     couponValue:
-      couponProjection.forecastCount > 0 ? null : exitAccrualTerms.couponAmount,
+      couponAnnualPercentOverride === null
+        ? exitAccrualTerms.couponAmount
+        : null,
     couponPeriodDays: exitAccrualTerms.couponPeriodDays,
     coupons: couponProjection.cashFlows,
     amortizations: amortizationProjection.cashFlows,
@@ -1094,6 +1101,7 @@ function createCouponCashFlows({
   exitDate,
   currentNominal,
   fallbackCouponPeriodDays,
+  couponAnnualPercentOverride,
 }: {
   schedule: BondCouponScheduleItem[];
   amortizations: CashFlow[];
@@ -1101,6 +1109,7 @@ function createCouponCashFlows({
   exitDate: LocalDate;
   currentNominal: number;
   fallbackCouponPeriodDays: number;
+  couponAnnualPercentOverride: number | null;
 }): {
   cashFlows: CashFlow[];
   forecastCount: number;
@@ -1127,6 +1136,35 @@ function createCouponCashFlows({
       continue;
     }
 
+    const couponPeriodDays = coupon.startDate
+      ? getDaysBetween(coupon.startDate, coupon.date)
+      : fallbackCouponPeriodDays;
+    const nominalReduction = amortizations
+      .filter(
+        (amortization) =>
+          amortization.date > buyDate && amortization.date < coupon.date,
+      )
+      .reduce((sum, amortization) => sum + amortization.amount, 0);
+    const nominalAtCoupon = Math.max(currentNominal - nominalReduction, 0);
+
+    if (
+      couponAnnualPercentOverride !== null &&
+      couponPeriodDays !== null &&
+      couponPeriodDays > 0
+    ) {
+      const amount =
+        (nominalAtCoupon *
+          couponAnnualPercentOverride *
+          couponPeriodDays) /
+        365 /
+        100;
+      cashFlows.push({ date: coupon.date, amount });
+      if (coupon.annualPercent !== null) {
+        lastKnownAnnualPercent = coupon.annualPercent;
+      }
+      continue;
+    }
+
     if (coupon.amount !== null) {
       cashFlows.push({ date: coupon.date, amount: coupon.amount });
       if (coupon.annualPercent !== null) {
@@ -1135,14 +1173,11 @@ function createCouponCashFlows({
       continue;
     }
 
-    const couponPeriodDays = coupon.startDate
-      ? getDaysBetween(coupon.startDate, coupon.date)
-      : fallbackCouponPeriodDays;
-
+    const annualPercent = couponAnnualPercentOverride ?? lastKnownAnnualPercent;
     if (
       coupon.date <= today ||
-      lastKnownAnnualPercent === null ||
-      lastKnownAnnualPercent <= 0 ||
+      annualPercent === null ||
+      annualPercent <= 0 ||
       couponPeriodDays === null ||
       couponPeriodDays <= 0
     ) {
@@ -1150,15 +1185,8 @@ function createCouponCashFlows({
       continue;
     }
 
-    const nominalReduction = amortizations
-      .filter(
-        (amortization) =>
-          amortization.date > buyDate && amortization.date < coupon.date,
-      )
-      .reduce((sum, amortization) => sum + amortization.amount, 0);
-    const nominalAtCoupon = Math.max(currentNominal - nominalReduction, 0);
     const amount =
-      (nominalAtCoupon * lastKnownAnnualPercent * couponPeriodDays) / 365 / 100;
+      (nominalAtCoupon * annualPercent * couponPeriodDays) / 365 / 100;
 
     cashFlows.push({ date: coupon.date, amount });
     forecastCount += 1;
