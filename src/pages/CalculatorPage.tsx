@@ -986,6 +986,7 @@ function createCalculationView({
     currentNominal: faceValue,
     fallbackCouponPeriodDays: bond.coupon_period,
     couponAnnualPercentOverride,
+    couponAnnualPercent: couponPercent,
   });
   const exitAccrualTerms = getExitAccrualTerms({
     schedule: details.couponSchedule,
@@ -1102,6 +1103,7 @@ function createCouponCashFlows({
   currentNominal,
   fallbackCouponPeriodDays,
   couponAnnualPercentOverride,
+  couponAnnualPercent,
 }: {
   schedule: BondCouponScheduleItem[];
   amortizations: CashFlow[];
@@ -1110,6 +1112,7 @@ function createCouponCashFlows({
   currentNominal: number;
   fallbackCouponPeriodDays: number;
   couponAnnualPercentOverride: number | null;
+  couponAnnualPercent: number;
 }): {
   cashFlows: CashFlow[];
   forecastCount: number;
@@ -1153,9 +1156,7 @@ function createCouponCashFlows({
       couponPeriodDays > 0
     ) {
       const amount =
-        (nominalAtCoupon *
-          couponAnnualPercentOverride *
-          couponPeriodDays) /
+        (nominalAtCoupon * couponAnnualPercentOverride * couponPeriodDays) /
         365 /
         100;
       cashFlows.push({ date: coupon.date, amount });
@@ -1173,7 +1174,8 @@ function createCouponCashFlows({
       continue;
     }
 
-    const annualPercent = couponAnnualPercentOverride ?? lastKnownAnnualPercent;
+    const annualPercent =
+      couponAnnualPercentOverride ?? lastKnownAnnualPercent ?? couponAnnualPercent;
     if (
       coupon.date <= today ||
       annualPercent === null ||
