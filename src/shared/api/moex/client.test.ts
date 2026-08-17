@@ -47,7 +47,7 @@ describe("MOEX ISS client", () => {
       primary_board: "1",
       "securities.columns":
         "SECID,BOARDID,SHORTNAME,COUPONVALUE,NEXTCOUPON,ACCRUEDINT,PREVPRICE,FACEVALUE,MATDATE,COUPONPERIOD,ISSUESIZE,FACEUNIT,ISIN,REGNUMBER,CURRENCYID,LISTLEVEL,COUPONPERCENT,OFFERDATE",
-      "marketdata.columns": "BOARDID,SECID,LAST",
+      "marketdata.columns": "BOARDID,SECID,LAST,CHANGE",
     });
   });
 
@@ -323,7 +323,7 @@ describe("MOEX ISS client", () => {
       "iss.only": "securities,marketdata",
       "securities.columns":
         "SECID,BOARDID,SHORTNAME,COUPONVALUE,NEXTCOUPON,ACCRUEDINT,PREVPRICE,FACEVALUE,MATDATE,COUPONPERIOD,ISSUESIZE,FACEUNIT,ISIN,REGNUMBER,CURRENCYID,LISTLEVEL,COUPONPERCENT,OFFERDATE",
-      "marketdata.columns": "BOARDID,SECID,LAST",
+      "marketdata.columns": "BOARDID,SECID,LAST,CHANGE",
     });
   });
 });
@@ -483,7 +483,7 @@ function createSnapshotResponse() {
       ],
     },
     marketdata: {
-      columns: ["BOARDID", "SECID", "LAST"],
+      columns: ["BOARDID", "SECID", "LAST", "CHANGE"],
       data: [
         ["TQOB", "SU26233RMFS5", 59.538],
         ["TQOB", "SU26240RMFS0", 81.7],
@@ -517,6 +517,7 @@ function createBasicBond(
     offer_date: "2027-05-10",
     prev_price: 100,
     last_price: 100,
+    price_change: null,
     reg_number: "TEST",
     ...overrides,
   };

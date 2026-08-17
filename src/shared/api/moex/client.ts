@@ -31,7 +31,7 @@ const PRIMARY_BOND_SECURITY_COLUMNS = [
   "COUPONPERCENT",
   "OFFERDATE",
 ].join(",");
-const PRIMARY_BOND_MARKETDATA_COLUMNS = ["BOARDID", "SECID", "LAST"].join(",");
+const PRIMARY_BOND_MARKETDATA_COLUMNS = ["BOARDID", "SECID", "LAST", "CHANGE"].join(",");
 const BOND_MARKET_BOARD_SECURITY_COLUMNS = [
   "SECID",
   "BOARDID",
@@ -49,7 +49,7 @@ const BOND_MARKET_BOARD_MARKETDATA_COLUMNS = [
 
 /**
  * Loads the complete primary-board bond snapshot for local search and calculator defaults.
- * It requests only securities calculator/search fields and marketdata BOARDID, SECID, LAST;
+ * It requests only securities calculator/search fields and marketdata BOARDID, SECID, LAST, CHANGE;
  * the result is deliberately uncached because React Query owns freshness and deduplication.
  */
 export async function getPrimaryBondSnapshot(): Promise<BasicBondInfo[]> {
@@ -99,7 +99,7 @@ export { MAX_BOND_SEARCH_QUERY_LENGTH };
 
 /**
  * Loads one bond's basic data, preferring the primary-board snapshot for legacy callers.
- * Its fallback requests only securities calculator fields and marketdata BOARDID, SECID, LAST
+ * Its fallback requests only securities calculator fields and marketdata BOARDID, SECID, LAST, CHANGE
  * when the shared snapshot has no matching SECID.
  */
 export async function getBasicBondInfo({

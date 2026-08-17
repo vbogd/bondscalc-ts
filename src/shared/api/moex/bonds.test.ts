@@ -79,6 +79,7 @@ describe("normalizeBasicBondInfo", () => {
         OFFERDATE: null,
         PREVPRICE: 59.344,
         LAST: 59.538,
+        CHANGE: 0.194,
         REGNUMBER: "26233RMFS",
       }),
     ).toEqual({
@@ -98,9 +99,10 @@ describe("normalizeBasicBondInfo", () => {
       coupon_period: 182,
       issue_size: 599487782,
       offer_date: null,
-      prev_price: 59.344,
-      last_price: 59.538,
-      reg_number: "26233RMFS",
+        prev_price: 59.344,
+        last_price: 59.538,
+        price_change: 0.194,
+        reg_number: "26233RMFS",
     });
   });
 });
@@ -110,7 +112,9 @@ describe("primary bond snapshot normalization", () => {
     expect(
       mergeMarketDataRows({
         securityRows: [{ BOARDID: "TQOB", SECID: "SU26233RMFS5", PREVPRICE: 59.344 }],
-        marketDataRows: [{ BOARDID: "TQOB", SECID: "SU26233RMFS5", LAST: 59.538 }],
+        marketDataRows: [
+          { BOARDID: "TQOB", SECID: "SU26233RMFS5", LAST: 59.538, CHANGE: 0.194 },
+        ],
       }),
     ).toEqual([
       {
@@ -118,6 +122,7 @@ describe("primary bond snapshot normalization", () => {
         SECID: "SU26233RMFS5",
         PREVPRICE: 59.344,
         LAST: 59.538,
+        CHANGE: 0.194,
         VALUE: null,
         NUMTRADES: null,
       },
@@ -172,8 +177,8 @@ describe("primary bond snapshot normalization", () => {
           ],
         },
         marketdata: {
-          columns: ["BOARDID", "SECID", "LAST"],
-          data: [["TQOB", "SU26233RMFS5", 59.538]],
+          columns: ["BOARDID", "SECID", "LAST", "CHANGE"],
+          data: [["TQOB", "SU26233RMFS5", 59.538, 0.194]],
         },
       }),
     ).toEqual([
@@ -182,6 +187,7 @@ describe("primary bond snapshot normalization", () => {
         board_id: "TQOB",
         prev_price: 59.344,
         last_price: 59.538,
+        price_change: 0.194,
       }),
     ]);
   });

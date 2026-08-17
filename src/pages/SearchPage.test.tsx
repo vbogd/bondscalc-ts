@@ -203,6 +203,32 @@ describe("SearchPage", () => {
     );
   });
 
+  it("shows the MOEX price change before the price", async () => {
+    const user = userEvent.setup();
+    searchBasicBondInfoMock.mockResolvedValue([
+      createBond({ last_price: 94.12, price_change: -0.612 }),
+    ]);
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "262");
+
+    const change = await screen.findByText("-0,612");
+    expect(change).toHaveClass("text-sm", "text-destructive/70");
+    expect(change.nextElementSibling).toHaveTextContent("94,12 %");
+  });
+
+  it("uses the success style for a positive price change", async () => {
+    const user = userEvent.setup();
+    searchBasicBondInfoMock.mockResolvedValue([
+      createBond({ price_change: 0.245 }),
+    ]);
+    renderSearchPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Поиск" }), "262");
+
+    expect(await screen.findByText("+0,245")).toHaveClass("text-success/70");
+  });
+
   it("shows a warning list level badge for level 3", async () => {
     const user = userEvent.setup();
     searchBasicBondInfoMock.mockResolvedValue([
@@ -443,6 +469,7 @@ function createBond(overrides: Partial<BasicBondInfo> = {}): BasicBondInfo {
     offer_date: null,
     prev_price: 59.34,
     last_price: null,
+    price_change: null,
     reg_number: "26233RMFS",
     ...overrides,
   };

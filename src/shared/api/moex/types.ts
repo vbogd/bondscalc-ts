@@ -50,6 +50,8 @@ export type BasicBondInfo = {
   prev_price: number | null;
   // MOEX marketdata: LAST
   last_price: number | null;
+  // MOEX marketdata: CHANGE, price change in percentage points to nominal
+  price_change: number | null;
   // MOEX: REGNUMBER
   reg_number: string | null;
   // NOTE: update search normalization when adding more columns

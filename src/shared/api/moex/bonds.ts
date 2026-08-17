@@ -113,6 +113,7 @@ export function normalizeBasicBondInfo(row: IssRow): BasicBondInfo | null {
     offer_date: getLocalDate(row, "offerdate"),
     prev_price: getNumber(row, "prevprice"),
     last_price: getNumber(row, "last"),
+    price_change: getNumber(row, "change"),
     reg_number: getString(row, "regnumber"),
   };
 }
@@ -142,6 +143,7 @@ export function mergeMarketDataRows({
       ? {
           ...securityRow,
           LAST: getNumber(marketDataRow, "last"),
+          CHANGE: getNumber(marketDataRow, "change"),
           VALUE: getNumber(marketDataRow, "value"),
           NUMTRADES: getNumber(marketDataRow, "numtrades"),
         }

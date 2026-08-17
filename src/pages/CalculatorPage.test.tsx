@@ -904,6 +904,7 @@ function createBond(overrides: Partial<BasicBondInfo> = {}): BasicBondInfo {
     offer_date: "2027-06-15",
     prev_price: 90,
     last_price: null,
+    price_change: null,
     reg_number: "TEST",
     ...overrides,
   };

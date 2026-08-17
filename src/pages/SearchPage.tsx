@@ -215,6 +215,19 @@ function BondSearchResult({ bond }: { bond: BasicBondInfo }) {
               </span>
             </ResultRow>
             <ResultRow label="Цена">
+              {bond.price_change !== null ? (
+                <span
+                  className={
+                    bond.price_change > 0
+                      ? "text-sm text-success/70"
+                      : bond.price_change < 0
+                        ? "text-sm text-destructive/70"
+                        : "text-sm text-muted-foreground/70"
+                  }
+                >
+                  {formatPriceChange(bond.price_change)}
+                </span>
+              ) : null}
               <span
                 className={
                   displayPrice !== null && displayPrice > 100
@@ -395,6 +408,10 @@ function formatPercent(
 
 function formatPrice(value: number | null): string {
   return value === null ? "—" : `${formatNumber(value)} %`;
+}
+
+function formatPriceChange(value: number): string {
+  return `${value > 0 ? "+" : ""}${formatNumber(value)}`;
 }
 
 function getDisplayPrice(bond: BasicBondInfo): number | null {
