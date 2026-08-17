@@ -169,6 +169,8 @@ export function ResultPanel({
 }
 
 export function ResultRow({
+  labelAction,
+  labelActionLabel,
   label,
   strong = false,
   tooltip,
@@ -176,6 +178,8 @@ export function ResultRow({
   value,
   valueTone = "neutral",
 }: {
+  labelAction?: () => void;
+  labelActionLabel?: string;
   label: string;
   value: string;
   strong?: boolean;
@@ -188,7 +192,23 @@ export function ResultRow({
   return (
     <>
       <dt className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-        <span className="min-w-0">{label}</span>
+        {labelAction ? (
+          <TextActionButton
+            actionLabel={labelActionLabel ?? `Переключить показатель «${label}»`}
+            ariaLabel={labelActionLabel}
+            className="min-w-0 -my-2.5 py-2.5 text-left before:-inset-x-2"
+            onClick={labelAction}
+          >
+            {label}
+          </TextActionButton>
+        ) : (
+          <span className="min-w-0">{label}</span>
+        )}
+        {labelActionLabel ? (
+          <span id={`${tooltipId}-action`} className="sr-only">
+            {labelActionLabel}
+          </span>
+        ) : null}
         {tooltip ? (
           <>
             <ResponsiveHint
@@ -222,6 +242,72 @@ export function ResultRow({
         {value}
       </dd>
     </>
+  );
+}
+
+const TEXT_ACTION_BUTTON_CLASS =
+  "relative isolate min-h-11 cursor-pointer rounded-sm text-sky-700 underline decoration-1 decoration-current/40 underline-offset-4 transition-colors before:pointer-events-none before:absolute before:inset-x-0 before:inset-y-2 before:-z-10 before:rounded-sm before:content-[''] before:transition-colors active:text-sky-800 active:before:bg-accent hover:text-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+export function TextActionButton({
+  actionLabel,
+  ariaLabel,
+  children,
+  className,
+  onClick,
+  pressed,
+}: {
+  actionLabel: string;
+  ariaLabel?: string;
+  children: ReactNode;
+  className?: string;
+  onClick: () => void;
+  pressed?: boolean;
+}) {
+  return (
+    <>
+      <button
+        aria-describedby={`${actionLabel.replace(/[^a-zа-яё0-9]+/gi, "-")}-action`}
+        aria-label={ariaLabel}
+        aria-pressed={pressed}
+        className={cn(TEXT_ACTION_BUTTON_CLASS, className)}
+        onClick={onClick}
+        type="button"
+      >
+        {children}
+      </button>
+      <span
+        id={`${actionLabel.replace(/[^a-zа-яё0-9]+/gi, "-")}-action`}
+        className="sr-only"
+      >
+        {actionLabel}
+      </span>
+    </>
+  );
+}
+
+export function TextToggleButton({
+  actionLabel,
+  ariaLabel,
+  children,
+  onClick,
+  pressed,
+}: {
+  actionLabel: string;
+  ariaLabel?: string;
+  children: ReactNode;
+  onClick: () => void;
+  pressed: boolean;
+}) {
+  return (
+    <TextActionButton
+      actionLabel={actionLabel}
+      ariaLabel={ariaLabel}
+      className="px-2 text-sm font-medium"
+      onClick={onClick}
+      pressed={pressed}
+    >
+      {children}
+    </TextActionButton>
   );
 }
 

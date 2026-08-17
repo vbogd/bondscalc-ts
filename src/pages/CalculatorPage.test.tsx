@@ -117,10 +117,14 @@ describe("CalculatorPage", () => {
 
     expect(taxToggle).toHaveAttribute("aria-pressed", "false");
     expect(commissionToggle).toHaveAttribute("aria-pressed", "false");
-    expect(taxToggle).toHaveClass("h-9");
-    expect(commissionToggle).toHaveClass("h-9");
-    expect(taxToggle).toHaveClass("border", "bg-transparent");
-    expect(commissionToggle).toHaveClass("border", "bg-transparent");
+    expect(taxToggle).toHaveClass("min-h-11", "underline", "text-sky-700");
+    expect(commissionToggle).toHaveClass(
+      "min-h-11",
+      "underline",
+      "text-sky-700",
+    );
+    expect(taxToggle).not.toHaveClass("border");
+    expect(commissionToggle).not.toHaveClass("border");
     expect(
       Array.from(toggleGroup.querySelectorAll("button"), (button) =>
         button.textContent?.trim(),
@@ -256,6 +260,35 @@ describe("CalculatorPage", () => {
     expect(
       screen.queryByRole("link", { name: "Открыть поиск облигаций" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("switches between XIRR and simple annualized return", async () => {
+    const user = userEvent.setup();
+    getBasicBondInfoMock.mockResolvedValue(createBond());
+    getBondDetailsMock.mockResolvedValue(createDetails());
+
+    renderCalculatorPage();
+
+    await screen.findByRole("heading", { name: "Тест 001" });
+    const resultsCard = screen
+      .getByRole("heading", { name: "Результаты" })
+      .closest('[data-slot="card"]')!;
+    const xirrValue = getDefinitionValue(resultsCard, "доходность XIRR");
+
+    await user.click(
+      screen.getByRole("button", { name: "Переключить на доходность, год" }),
+    );
+
+    expect(getDefinitionValue(resultsCard, "доходность, год")).not.toBe(xirrValue);
+    expect(
+      screen.getByRole("button", { name: "Переключить на доходность XIRR" }),
+    ).toHaveAccessibleDescription("Переключить на доходность XIRR");
+
+    await user.click(
+      screen.getByRole("button", { name: "Переключить на доходность XIRR" }),
+    );
+
+    expect(getDefinitionValue(resultsCard, "доходность XIRR")).toBe(xirrValue);
   });
 
   it("copies the ISIN from the issue header", async () => {

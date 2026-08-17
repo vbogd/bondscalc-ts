@@ -36,6 +36,7 @@ import {
   ResultPanel,
   ResultRow,
   StateMessage,
+  TextToggleButton,
 } from "../shared/ui/FinancialUi";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,10 +54,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FieldGroup, FieldLegend, FieldSet } from "@/components/ui/field";
 import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -64,6 +61,7 @@ import {
 } from "@/components/ui/tooltip";
 
 type CalculatorMode = "maturity" | "offer" | "sale";
+type YieldMode = "xirr" | "annualized";
 
 type CalculatorForm = {
   faceValue: string;
@@ -78,6 +76,8 @@ type CalculatorForm = {
 
 type CalculationRow = {
   label: string;
+  labelAction?: () => void;
+  labelActionLabel?: string;
   value: string;
   strong?: boolean;
   tooltip?: string;
@@ -105,7 +105,7 @@ const XIRR_TOOLTIP =
   "Годовая доходность с учетом дат купонов, амортизаций и погашения.";
 const ANNUALIZED_PROFIT_LABEL = "доходность, год";
 const ANNUALIZED_PROFIT_TOOLTIP =
-  "Прибыль после налога относительно затрат, линейно пересчитанная на год.";
+  "Прибыль относительно затрат, линейно пересчитанная на год.";
 const MISSING_NOMINAL_CURRENCY_ACCRUED_INTEREST_MESSAGE =
   "НКД в валюте номинала недоступен через MOEX API.\nВ расчетах используется НКД равный 0.";
 
@@ -122,6 +122,7 @@ export function CalculatorPage() {
   const normalizedSecid = secid.trim().toUpperCase();
   const cameFromSearch = location.state?.fromSearch === true;
   const [mode, setMode] = useState<CalculatorMode>("maturity");
+  const [yieldMode, setYieldMode] = useState<YieldMode>("xirr");
   const [form, setForm] = useState<CalculatorForm>(() => createDefaultForm());
   const [editedFields, setEditedFields] = useState<Set<keyof CalculatorForm>>(
     () => new Set(),
@@ -257,6 +258,7 @@ export function CalculatorPage() {
     if (offerWasRemoved) {
       modeRef.current = "maturity";
       setMode("maturity");
+      setYieldMode(getDefaultYieldMode("maturity"));
       setShowOfferUnavailableAlert(true);
 
       if (offerUnavailableTimerRef.current !== null) {
@@ -272,6 +274,9 @@ export function CalculatorPage() {
     if (shouldApplyMoexValues) {
       modeRef.current = nextMode;
       setMode(nextMode);
+      if (isNewBond) {
+        setYieldMode(getDefaultYieldMode(nextMode));
+      }
       setForm((currentForm) =>
         createFormFromBond(data.basicInfo, data.details, targetDates, nextMode, {
           commissionPercent: currentForm.commissionPercent,
@@ -327,6 +332,11 @@ export function CalculatorPage() {
           taxPercent: ignoredCosts.includes("tax") ? "0" : form.taxPercent,
         },
         mode,
+        yieldMode,
+        onYieldModeChange: () =>
+          setYieldMode((currentMode) =>
+            currentMode === "xirr" ? "annualized" : "xirr",
+          ),
         accruedInterest: historicalBuyDate
           ? historicalSnapshotQuery.data?.accruedInterest ??
             (usesZeroAccruedInterestFallback ? 0 : null)
@@ -355,6 +365,7 @@ export function CalculatorPage() {
       historicalSnapshotQuery.isLoading,
       ignoredCosts,
       mode,
+      yieldMode,
       usesZeroAccruedInterestFallback,
     ],
   );
@@ -380,6 +391,7 @@ export function CalculatorPage() {
   function handleModeChange(nextMode: CalculatorMode) {
     modeRef.current = nextMode;
     setMode(nextMode);
+    setYieldMode(getDefaultYieldMode(nextMode));
 
     if (!data || !targetDates) {
       return;
@@ -451,6 +463,9 @@ export function CalculatorPage() {
     };
     modeRef.current = nextMode;
     setMode(nextMode);
+    if (offerWasRemoved) {
+      setYieldMode(getDefaultYieldMode(nextMode));
+    }
     setForm((currentForm) =>
       createFormFromBond(freshBasicInfo, freshDetails, freshTargetDates, nextMode, {
         commissionPercent: currentForm.commissionPercent,
@@ -719,30 +734,50 @@ export function CalculatorPage() {
           <ResultPanel
             title="Результаты"
             controls={
-              <ToggleGroup
+              <div
                 aria-label="Учет налога и комиссии"
-                className="grid w-full grid-cols-2 gap-2 sm:flex"
-                onValueChange={setIgnoredCosts}
-                type="multiple"
-                value={ignoredCosts}
+                className="flex w-full flex-wrap gap-1 sm:w-auto"
+                role="toolbar"
               >
-                <ToggleGroupItem
-                  aria-label="Комиссия"
-                  className="rounded-md border border-input bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground active:bg-transparent data-[state=on]:border-foreground/50 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
-                  value="commission"
+                <TextToggleButton
+                  ariaLabel="Комиссия"
+                  actionLabel={
+                    ignoredCosts.includes("commission")
+                      ? "Переключить на расчет с комиссией"
+                      : "Переключить на расчет без комиссии"
+                  }
+                  onClick={() =>
+                    setIgnoredCosts((currentCosts) =>
+                      currentCosts.includes("commission")
+                        ? currentCosts.filter((cost) => cost !== "commission")
+                        : [...currentCosts, "commission"],
+                    )
+                  }
+                  pressed={ignoredCosts.includes("commission")}
                 >
                   {ignoredCosts.includes("commission")
                     ? "без комиссии"
                     : "с комиссией"}
-                </ToggleGroupItem>
-                <ToggleGroupItem
-                  aria-label="Налог"
-                  className="rounded-md border border-input bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground active:bg-transparent data-[state=on]:border-foreground/50 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
-                  value="tax"
+                </TextToggleButton>
+                <TextToggleButton
+                  ariaLabel="Налог"
+                  actionLabel={
+                    ignoredCosts.includes("tax")
+                      ? "Переключить на расчет с налогом"
+                      : "Переключить на расчет без налога"
+                  }
+                  onClick={() =>
+                    setIgnoredCosts((currentCosts) =>
+                      currentCosts.includes("tax")
+                        ? currentCosts.filter((cost) => cost !== "tax")
+                        : [...currentCosts, "tax"],
+                    )
+                  }
+                  pressed={ignoredCosts.includes("tax")}
                 >
                   {ignoredCosts.includes("tax") ? "без налога" : "с налогом"}
-                </ToggleGroupItem>
-              </ToggleGroup>
+                </TextToggleButton>
+              </div>
             }
             footer={
               calculationView.warningAlert || calculationView.warnings.length > 0 ? (
@@ -917,6 +952,10 @@ function getDefaultSaleDate(buyDate: LocalDate): LocalDate {
   return isPastLocalDate(buyDate) ? getTodayLocalDate() : addDays(buyDate, 1);
 }
 
+function getDefaultYieldMode(mode: CalculatorMode): YieldMode {
+  return mode === "sale" ? "annualized" : "xirr";
+}
+
 function createCalculationView({
   accruedInterest,
   accruedInterestMessage,
@@ -924,6 +963,8 @@ function createCalculationView({
   details,
   form,
   mode,
+  onYieldModeChange,
+  yieldMode,
 }: {
   accruedInterest: number | null;
   accruedInterestMessage: string | null;
@@ -931,6 +972,8 @@ function createCalculationView({
   details: BondDetails | null;
   form: CalculatorForm;
   mode: CalculatorMode;
+  onYieldModeChange: () => void;
+  yieldMode: YieldMode;
 }): CalculationView {
   const faceValue = parseDecimal(form.faceValue);
   const couponPercent = parseDecimal(form.couponPercent);
@@ -960,13 +1003,18 @@ function createCalculationView({
     !bond ||
     !details
   ) {
-    return createUnavailableCalculationView({ mode, currentYieldPercent });
+    return createUnavailableCalculationView({
+      currentYieldPercent,
+      onYieldModeChange,
+      yieldMode,
+    });
   }
 
   if (accruedInterest === null) {
     return createUnavailableCalculationView({
-      mode,
       currentYieldPercent,
+      onYieldModeChange,
+      yieldMode,
       warnings: accruedInterestMessage && !warningAlert ? [accruedInterestMessage] : [],
       warningAlert,
     });
@@ -1017,7 +1065,13 @@ function createCalculationView({
   const currency = bond.face_unit;
 
   return {
-    summaryRows: createSummaryRows({ mode, currentYieldPercent, result, currency }),
+    summaryRows: createSummaryRows({
+      currentYieldPercent,
+      currency,
+      onYieldModeChange,
+      result,
+      yieldMode,
+    }),
     detailSections: [
       {
         title: "Покупка",
@@ -1294,18 +1348,24 @@ function createCashFlowWarnings({
 }
 
 function createUnavailableCalculationView({
-  mode,
   currentYieldPercent,
+  onYieldModeChange,
+  yieldMode,
   warnings = [],
   warningAlert = null,
 }: {
-  mode: CalculatorMode;
   currentYieldPercent: number | null;
+  onYieldModeChange: () => void;
+  yieldMode: YieldMode;
   warnings?: string[];
   warningAlert?: string | null;
 }): CalculationView {
   return {
-    summaryRows: createSummaryRows({ mode, currentYieldPercent }),
+    summaryRows: createSummaryRows({
+      currentYieldPercent,
+      onYieldModeChange,
+      yieldMode,
+    }),
     detailSections: null,
     warningAlert,
     warnings,
@@ -1315,13 +1375,15 @@ function createUnavailableCalculationView({
 function createSummaryRows({
   currency,
   currentYieldPercent,
-  mode,
+  onYieldModeChange,
   result,
+  yieldMode,
 }: {
   currency?: string;
   currentYieldPercent: number | null;
-  mode: CalculatorMode;
+  onYieldModeChange: () => void;
   result?: ReturnType<typeof calculateBondTrade>;
+  yieldMode: YieldMode;
 }): CalculationRow[] {
   const annualizedReturnPercent = result?.annualizedReturnPercent ?? null;
   const annualizedXirrPercent = result?.annualizedXirrPercent ?? null;
@@ -1334,25 +1396,22 @@ function createSummaryRows({
       tooltip: CURRENT_YIELD_TOOLTIP,
       tooltipLabel: "Формула текущей доходности",
     },
-    ...(mode === "sale"
-      ? [
-          {
-            label: ANNUALIZED_PROFIT_LABEL,
-            value: formatPercent(annualizedReturnPercent),
-            tooltip: ANNUALIZED_PROFIT_TOOLTIP,
-            strong: true,
-            valueTone: getProfitTone(annualizedReturnPercent),
-          },
-        ]
-      : [
-          {
-            label: XIRR_LABEL,
-            value: formatPercent(annualizedXirrPercent),
-            tooltip: XIRR_TOOLTIP,
-            strong: true,
-            valueTone: getProfitTone(annualizedXirrPercent),
-          },
-        ]),
+    {
+      label: yieldMode === "xirr" ? XIRR_LABEL : ANNUALIZED_PROFIT_LABEL,
+      labelAction: onYieldModeChange,
+      labelActionLabel:
+        yieldMode === "xirr"
+          ? `Переключить на ${ANNUALIZED_PROFIT_LABEL}`
+          : `Переключить на ${XIRR_LABEL}`,
+      value: formatPercent(
+        yieldMode === "xirr" ? annualizedXirrPercent : annualizedReturnPercent,
+      ),
+      tooltip: yieldMode === "xirr" ? XIRR_TOOLTIP : ANNUALIZED_PROFIT_TOOLTIP,
+      strong: true,
+      valueTone: getProfitTone(
+        yieldMode === "xirr" ? annualizedXirrPercent : annualizedReturnPercent,
+      ),
+    },
     {
       label: "прибыль",
       value: result && currency ? formatMoney(profitAfterTax, currency) : "—",
