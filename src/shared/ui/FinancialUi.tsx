@@ -150,13 +150,14 @@ export function ResultPanel({
     <Card>
       <CardHeader
         className={cn(
-          controls && "flex flex-row flex-wrap items-center justify-between gap-3",
+          "flex flex-row flex-wrap items-center justify-between gap-x-3 gap-y-1",
+          !controls && "block",
         )}
       >
         <CardTitle>
           <h2 className="text-xl">{title}</h2>
         </CardTitle>
-        {controls ? <div className="w-full sm:w-auto">{controls}</div> : null}
+        {controls}
       </CardHeader>
       <CardContent>{children}</CardContent>
       {footer ? (
@@ -246,7 +247,7 @@ export function ResultRow({
 }
 
 const TEXT_ACTION_BUTTON_CLASS =
-  "relative isolate min-h-11 cursor-pointer rounded-sm text-action underline decoration-1 decoration-action/40 underline-offset-4 transition-colors before:pointer-events-none before:absolute before:inset-x-0 before:inset-y-2 before:-z-10 before:rounded-sm before:content-[''] before:transition-colors active:text-action-hover active:before:bg-accent hover:text-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "relative isolate inline-flex items-center justify-center min-h-11 cursor-pointer rounded-sm text-action underline decoration-1 decoration-action/40 underline-offset-4 transition-colors before:pointer-events-none before:absolute before:inset-x-0 before:inset-y-2 before:-z-10 before:rounded-sm before:content-[''] before:transition-colors active:text-action-hover active:before:bg-accent hover:text-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function TextActionButton({
   actionLabel,
@@ -302,7 +303,7 @@ export function TextToggleButton({
     <TextActionButton
       actionLabel={actionLabel}
       ariaLabel={ariaLabel}
-      className="px-2 text-sm font-medium"
+      className="justify-start px-2 text-left text-lg leading-6 font-medium sm:text-xl"
       onClick={onClick}
       pressed={pressed}
     >

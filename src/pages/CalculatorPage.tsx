@@ -736,7 +736,7 @@ export function CalculatorPage() {
             controls={
               <div
                 aria-label="Учет налога и комиссии"
-                className="flex w-full flex-wrap gap-1 sm:w-auto"
+                className="flex max-w-full flex-nowrap items-center justify-start gap-3 sm:ml-auto sm:justify-end sm:gap-1"
                 role="toolbar"
               >
                 <TextToggleButton
