@@ -246,7 +246,7 @@ export function ResultRow({
 }
 
 const TEXT_ACTION_BUTTON_CLASS =
-  "relative isolate min-h-11 cursor-pointer rounded-sm text-sky-700 underline decoration-1 decoration-current/40 underline-offset-4 transition-colors before:pointer-events-none before:absolute before:inset-x-0 before:inset-y-2 before:-z-10 before:rounded-sm before:content-[''] before:transition-colors active:text-sky-800 active:before:bg-accent hover:text-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "relative isolate min-h-11 cursor-pointer rounded-sm text-action underline decoration-1 decoration-action/40 underline-offset-4 transition-colors before:pointer-events-none before:absolute before:inset-x-0 before:inset-y-2 before:-z-10 before:rounded-sm before:content-[''] before:transition-colors active:text-action-hover active:before:bg-accent hover:text-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function TextActionButton({
   actionLabel,

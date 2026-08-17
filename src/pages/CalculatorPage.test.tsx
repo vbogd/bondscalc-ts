@@ -117,11 +117,11 @@ describe("CalculatorPage", () => {
 
     expect(taxToggle).toHaveAttribute("aria-pressed", "false");
     expect(commissionToggle).toHaveAttribute("aria-pressed", "false");
-    expect(taxToggle).toHaveClass("min-h-11", "underline", "text-sky-700");
+    expect(taxToggle).toHaveClass("min-h-11", "underline", "text-action");
     expect(commissionToggle).toHaveClass(
       "min-h-11",
       "underline",
-      "text-sky-700",
+      "text-action",
     );
     expect(taxToggle).not.toHaveClass("border");
     expect(commissionToggle).not.toHaveClass("border");

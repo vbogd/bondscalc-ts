@@ -24,6 +24,8 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -55,6 +57,8 @@
   --success-foreground: oklch(0.985 0 0);
   --warning: oklch(0.55 0.13 85);
   --warning-foreground: oklch(0.985 0 0);
+  --action: oklch(0.52 0.13 238);
+  --action-hover: oklch(0.44 0.14 238);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
